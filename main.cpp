@@ -14,8 +14,10 @@ using namespace cv;
 using namespace dnn;
 using namespace std;
 
-static const string kWinName = "Deep learning face detection use OpenCV";
+static const string kWinName = "Face detection use OpenCV";
 static const string kWinRoi = "ROI";
+
+int simulatedFocus=0;
 
 PGconn *conn;
 
@@ -160,10 +162,31 @@ roi=roi & cv::Rect(0, 0, frame.size().width, frame.size().height);
 
 cv::Mat iroi = frame(roi);
 cv::Mat iroig, lap, lapim;
+cv::Mat edges, er;
+
+if (simulatedFocus>0) {
+  double s=(double)simulatedFocus/50.0;
+  cv::GaussianBlur(iroi, iroi, Size(7, 7), s, s);
+}
 
 //GaussianBlur(iroi, iroi, Size(3, 3), 0, 0, BORDER_DEFAULT);
 cvtColor(iroi, iroig, COLOR_BGR2GRAY);
 Laplacian(iroig, lap, CV_64F, 3);
+
+cv::GaussianBlur(iroig, edges, Size(7, 7), 1.5, 1.5);
+cv::Canny(edges, edges, 0, 30, 3);
+
+Scalar emean, estddev;
+meanStdDev(edges, emean, estddev, Mat());
+double ev = estddev.val[0] * estddev.val[0];
+printf("eVAR: %f\n", ev);
+
+// Red edges
+cv::cvtColor(edges, er, COLOR_GRAY2BGR);
+er=er.mul(cv::Scalar(0, 0, 255), 1);
+
+//cv::add(iroi, er, iroi, edges);
+cv::bitwise_or(iroi, er, iroi, edges);
 
 Scalar mean, stddev; // 0:1st channel, 1:2nd channel and 2:3rd channel
 meanStdDev(lap, mean, stddev, Mat());
@@ -231,9 +254,7 @@ line(frame, landmark[0], landmark[1], Scalar(0, 255, 0));
 
 // Nose
 circle(frame, landmark[2], 8, Scalar(0, 255, 255), 1);
-
 circle(frame, center, 8, Scalar(128, 128, 255), 2);
-
 
 // Mouth
 circle(frame, landmark[3], 2, Scalar(0, 255, 255), 2);
@@ -494,6 +515,8 @@ connect_db();
 
 namedWindow(kWinName, WINDOW_NORMAL);
 namedWindow(kWinRoi, WINDOW_NORMAL);
+
+createTrackbar("Focus:", kWinName, &simulatedFocus, 400);
 
 if (argc>2) {
 	detect_from_image(face, of, argv[1]);
