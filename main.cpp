@@ -19,6 +19,10 @@ static const string kWinRoi = "ROI";
 
 int simulatedFocus=0;
 
+int avgc=0;
+cv::Mat p;
+cv::Mat pavg;
+
 PGconn *conn;
 
 class OpenFace
@@ -26,6 +30,7 @@ class OpenFace
 public:
 OpenFace(string modelpath);
 cv::Mat detect(cv::Mat &frame);
+void store(cv::Mat vec);
 void train();
 void predict(cv::Mat &query);
 int label=1;
@@ -58,21 +63,30 @@ Mat OpenFace::detect(Mat &frame)
 {
 vector<cv::Mat> outs;
 cv::Mat blob;
-cv::Mat l=cv::Mat(1, 1, CV_32SC1, label);
 
 blobFromImage(frame, blob, 1 / 255.0, Size(96, 96), Scalar(0, 0, 0), true, false);
 this->net.setInput(blob);
 this->net.forward(outs);
 
-// store it
-trainingData.push_back(outs[0]);
-labels.push_back(l);
-
 return outs[0];
+}
+
+void OpenFace::store(cv::Mat vec)
+{
+cv::Mat l=cv::Mat(1, 1, CV_32SC1, label);
+
+// store it
+trainingData.push_back(vec);
+labels.push_back(l);
+printf("Data[%d]: %d\n", label, labels.rows);
 }
 
 void OpenFace::train()
 {
+if (trainingData.empty()) {
+	printf("No data to train with ! (Store some with with 's')\n");
+	return;
+}
 svm->train(trainingData, cv::ml::ROW_SAMPLE, labels);
 }
 
@@ -194,16 +208,22 @@ variance = stddev.val[0] * stddev.val[0];
 
 //printf("VAR: %f\n", variance);
 
+// Eyes
 Point d = landmark[0]-landmark[1];
 float angle = (atan2f((float)d.y, (float)d.x) * 180.f / CV_PI) - 180.f;
 float dist = sqrtf(powf(d.y, 2)+powf(d.x, 2));
 
 Point nose = landmark[2];
-
 Point center=(landmark[0]+landmark[1]+landmark[2])*0.3333;
 
 //printf("EYES: %f.2 deg, dist: %f.2 \n", angle, dist);
 
+// Mouth
+Point md = landmark[3]-landmark[4];
+//float angle = (atan2f((float)d.y, (float)d.x) * 180.f / CV_PI) - 180.f;
+float mdist = sqrtf(powf(md.y, 2)+powf(md.x, 2));
+
+// Rotation
 cv::RotatedRect rbbox=cv::RotatedRect(nose, frame.size(), angle);
 cv::Rect bbox=rbbox.boundingRect();
 
@@ -238,7 +258,7 @@ imshow(kWinRoi, theFace);
 rectangle(frame, roi, Scalar(0, 0, 255), 3);
 
 //Get the label for the class name and its confidence
-string label = format("F:%.2f E: %.1f V: %.1f", conf, angle, variance);
+string label = format("F:%.2f E: %.1f V: %.0f", conf, angle, variance);
 
 //Display the label at the top of the bounding box
 /*int baseLine;
@@ -349,7 +369,7 @@ blobFromImage(dst, blob, 1 / 255.0, Size(this->inpWidth, this->inpHeight), Scala
 this->net.setInput(blob);
 
 vector<Mat> outs;
-///net.enableWinograd(false);  ////如果是opencv4.7，那就需要加上这一行
+// this->net.enableWinograd(false);
 this->net.forward(outs, this->net.getUnconnectedOutLayersNames());
 
 /////generate proposals
@@ -424,14 +444,14 @@ res=PQexec(conn, s.c_str());
 if (PQresultStatus(res) != PGRES_COMMAND_OK) {
 	fprintf(stderr, "Connection to database failed: %s", PQerrorMessage(conn));
 	PQclear(res);
-	exit(2);
+	// exit(2);
 }
 }
 
 void detect_from_video(YOLOv8_face &face, OpenFace &of, bool video, string file="")
 {
 bool run=true;
-bool embeddings=true;
+bool embeddings=false;
 Mat frame;
 VideoCapture cap;
 
@@ -440,7 +460,7 @@ cap.set(CAP_PROP_FRAME_HEIGHT, 1080);
 cap.set(CAP_PROP_FRAME_WIDTH, 1920);
 
 if (!video) {
-	cap.open(0,0);
+	cap.open(2,0);
 } else {
 	cap.open(file);
 }
@@ -463,7 +483,7 @@ while (cap.read(frame) && run) {
 
 	if (f>0) {
 		vec=of.detect(face.theFace);
-		if (embeddings) {
+		if (conn && embeddings) {
 			dump_face(vec, 1);
 		}
 	}
@@ -473,12 +493,29 @@ while (cap.read(frame) && run) {
 	case 'q':
 		run=false;
 	break;
+	case 's':
+		if (f>0)
+			of.store(vec);
+	break;
 	case 'e':
 		embeddings=!embeddings;
 	break;
 	case 't':
 		embeddings=false;
 		of.train();
+	break;
+	case 'c':
+		p+=vec;
+		avgc++;
+		if (avgc>5) {
+			printf("Average: %d\n", avgc);
+			p.convertTo(pavg, CV_32F, avgc);
+			cout << avgc << pavg << endl;
+		}
+	break;
+	case 'w':
+		if (f>0)
+			of.predict(pavg);
 	break;
 	case 'r':
 		if (f>0)
@@ -500,7 +537,8 @@ conn=PQsetdbLogin(NULL, "5433", NULL, NULL, NULL, NULL, NULL);
 if (PQstatus(conn) != CONNECTION_OK) {
 	fprintf(stderr, "Connection to database failed: %s", PQerrorMessage(conn));
 	PQfinish(conn);
-	exit(1);
+	conn=NULL;
+	//exit(1);
 }
 
 return 0;
@@ -512,6 +550,8 @@ YOLOv8_face face("weights/yolov8n-face.onnx", 0.45, 0.5);
 OpenFace of("weights/nn4.v2.t7");
 
 connect_db();
+
+p=cv::Mat(1, 128, CV_64F);
 
 namedWindow(kWinName, WINDOW_NORMAL);
 namedWindow(kWinRoi, WINDOW_NORMAL);
@@ -527,7 +567,8 @@ if (argc>2) {
 }
 destroyAllWindows();
 
-PQfinish(conn);
+if (conn)
+	PQfinish(conn);
 
 return 0;
 }
