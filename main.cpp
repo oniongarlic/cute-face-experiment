@@ -8,6 +8,8 @@
 #include <opencv2/highgui.hpp>
 #include <opencv2/ml.hpp>
 
+#include <unistd.h>
+
 #include <libpq-fe.h>
 
 using namespace cv;
@@ -448,7 +450,7 @@ if (PQresultStatus(res) != PGRES_COMMAND_OK) {
 }
 }
 
-void detect_from_video(YOLOv8_face &face, OpenFace &of, bool video, string file="")
+void detect_from_video(YOLOv8_face &face, OpenFace &of, bool video, int camera, string file="")
 {
 bool run=true;
 bool embeddings=false;
@@ -460,7 +462,7 @@ cap.set(CAP_PROP_FRAME_HEIGHT, 1080);
 cap.set(CAP_PROP_FRAME_WIDTH, 1920);
 
 if (!video) {
-	cap.open(2,0);
+	cap.open(camera, 0);
 } else {
 	cap.open(file);
 }
@@ -531,14 +533,14 @@ cap.release();
 }
 
 
-int connect_db()
+int connect_db(char *cinfo)
 {
-conn=PQsetdbLogin(NULL, "5433", NULL, NULL, NULL, NULL, NULL);
+conn=PQconnectdb(cinfo ? cinfo : "");
 if (PQstatus(conn) != CONNECTION_OK) {
 	fprintf(stderr, "Connection to database failed: %s", PQerrorMessage(conn));
 	PQfinish(conn);
 	conn=NULL;
-	//exit(1);
+	return -1;
 }
 
 return 0;
@@ -546,25 +548,43 @@ return 0;
 
 int main(int argc, char **argv)
 {
+int opt,camera_id=0;
+char *dbopts=NULL;
+char *input=NULL;
+
 YOLOv8_face face("weights/yolov8n-face.onnx", 0.45, 0.5);
 OpenFace of("weights/nn4.v2.t7");
 
-connect_db();
+if (argc>1) {
+	input=argv[1];
+	optind=2;
+}
 
-p=cv::Mat(1, 128, CV_64F);
+while ((opt = getopt(argc, argv, "d:c:")) != -1) {
+	switch(opt) {
+	case 'd':
+		dbopts=optarg;
+	break;
+	case 'c':
+		camera_id=atoi(optarg);
+	break;
+	}
+}
+
+printf("DB: %s\n", dbopts);
+connect_db(dbopts);
 
 namedWindow(kWinName, WINDOW_NORMAL);
 namedWindow(kWinRoi, WINDOW_NORMAL);
 
 createTrackbar("Focus:", kWinName, &simulatedFocus, 400);
 
-if (argc>2) {
-	detect_from_image(face, of, argv[1]);
-} else if (argc>1) {
-	detect_from_video(face, of, 1, argv[1]);
-} else {
-	detect_from_video(face, of, 0);
-}
+p=cv::Mat(1, 128, CV_64F);
+
+printf("Input: %s Camera: %d\n", input, camera_id);
+
+detect_from_video(face, of, 0, camera_id, input);
+
 destroyAllWindows();
 
 if (conn)
