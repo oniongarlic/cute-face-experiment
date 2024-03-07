@@ -25,6 +25,40 @@ cv::Mat pavg;
 
 PGconn *conn;
 
+class MovingAverage // sort-of
+{
+public:
+MovingAverage(int n=5);
+double add(double val);
+double get();
+
+private:
+double m_value=0;
+int m_v=0;
+int m_n;
+};
+
+MovingAverage::MovingAverage(int n)
+{
+m_n=n;
+}
+
+double MovingAverage::add(double val)
+{
+if (m_v==0)
+	m_value=val;
+m_v++;
+double d=(val-m_value)/(double)m_v;
+m_value=m_value+d;
+
+return m_value;
+}
+
+double MovingAverage::get()
+{
+return m_value;
+}
+
 class OpenFace
 {
 public:
@@ -124,6 +158,8 @@ cv::Mat rot;
 void softmax_(const float* x, float* y, int length);
 void generate_proposal(Mat out, vector<Rect>& boxes, vector<float>& confidences, vector< vector<Point>>& landmarks, int imgh, int imgw, float ratioh, float ratiow, int padh, int padw);
 void drawPred(float conf, int left, int top, int right, int bottom, Mat& frame, vector<Point> landmark);
+
+MovingAverage avg_angle;
 };
 
 static inline float sigmoid_x(float x)
@@ -210,8 +246,11 @@ variance = stddev.val[0] * stddev.val[0];
 
 // Eyes
 Point d = landmark[0]-landmark[1];
-float angle = (atan2f((float)d.y, (float)d.x) * 180.f / CV_PI) - 180.f;
+float angle = (atan2f((float)d.y, (float)d.x) * 180.f / CV_PI) - 180.f + 360.f;
 float dist = sqrtf(powf(d.y, 2)+powf(d.x, 2));
+
+if (angle>180.0) angle=-(360.f-angle);
+angle=avg_angle.add(angle);
 
 Point nose = landmark[2];
 Point center=(landmark[0]+landmark[1]+landmark[2])*0.3333;
@@ -460,7 +499,7 @@ cap.set(CAP_PROP_FRAME_HEIGHT, 1080);
 cap.set(CAP_PROP_FRAME_WIDTH, 1920);
 
 if (!video) {
-	cap.open(2,0);
+	cap.open(0,0);
 } else {
 	cap.open(file);
 }
