@@ -187,10 +187,11 @@ if (simulatedFocus>0) {
 
 //GaussianBlur(iroi, iroi, Size(3, 3), 0, 0, BORDER_DEFAULT);
 cvtColor(iroi, iroig, COLOR_BGR2GRAY);
+equalizeHist(iroig, iroig);
 Laplacian(iroig, lap, CV_64F, 3);
 
 cv::GaussianBlur(iroig, edges, Size(7, 7), 1.5, 1.5);
-cv::Canny(edges, edges, 0, 30, 3);
+cv::Canny(edges, edges, 10, 160, 3, true);
 
 Scalar emean, estddev;
 meanStdDev(edges, emean, estddev, Mat());
@@ -583,7 +584,7 @@ p=cv::Mat(1, 128, CV_64F);
 
 printf("Input: %s Camera: %d\n", input, camera_id);
 
-detect_from_video(face, of, 0, camera_id, input);
+detect_from_video(face, of, 0, camera_id, input ? input : "");
 
 destroyAllWindows();
 
