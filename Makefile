@@ -7,5 +7,5 @@ all: main
 %.o: %.cpp $(DEPS)
 	$(CPP) -std=c++11 $(COMMON) $(CXXFLAGS) -c $< -o $@
 
-main: main.o
+main: main.o openface.o moving_average.o
 	$(CPP) -std=c++11 $(COMMON) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
