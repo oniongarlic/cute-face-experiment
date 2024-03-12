@@ -14,6 +14,7 @@
 
 #include "openface.hpp"
 #include "moving_average.hpp"
+#include "selfiesegment.hpp"
 
 using namespace cv;
 using namespace dnn;
@@ -21,6 +22,7 @@ using namespace std;
 
 static const string kWinName = "Face detection use OpenCV";
 static const string kWinRoi = "ROI";
+static const string kWinMask = "Mask";
 
 int simulatedFocus=0;
 
@@ -383,7 +385,7 @@ if (PQresultStatus(res) != PGRES_COMMAND_OK) {
 }
 }
 
-void detect_from_video(YOLOv8_face &face, OpenFace &of, bool video, int camera, string file="")
+void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, bool video, int camera, string file="")
 {
 bool run=true;
 bool embeddings=false;
@@ -421,6 +423,9 @@ while (cap.read(frame) && run) {
 		if (conn && embeddings) {
 			dump_face(vec, 1);
 		}
+		cv::Mat s2, ssm;
+		ssm=ss.detect(scaled);
+		// imshow(kWinMask, ssm);
 	}
 
 	int key = waitKey(20);
@@ -488,6 +493,8 @@ char *input=NULL;
 YOLOv8_face face("weights/yolov8n-face.onnx", 0.45, 0.5);
 OpenFace of("weights/nn4.v2.t7");
 
+SelfieSegment ss("/data/AI/selfie_segmenter.tflite");
+
 if (argc>1) {
 	input=argv[1];
 	optind=2;
@@ -509,6 +516,7 @@ connect_db(dbopts);
 
 namedWindow(kWinName, WINDOW_NORMAL);
 namedWindow(kWinRoi, WINDOW_NORMAL);
+namedWindow(kWinMask, WINDOW_NORMAL);
 
 createTrackbar("Focus:", kWinName, &simulatedFocus, 400);
 
@@ -516,7 +524,7 @@ p=cv::Mat(1, 128, CV_64F);
 
 printf("Input: %s Camera: %d\n", input, camera_id);
 
-detect_from_video(face, of, 0, camera_id, input ? input : "");
+detect_from_video(face, of, ss, 0, camera_id, input ? input : "");
 
 destroyAllWindows();
 
