@@ -392,12 +392,11 @@ bool embeddings=false;
 Mat frame;
 VideoCapture cap;
 
-cap.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'));
-cap.set(CAP_PROP_FRAME_HEIGHT, 1080);
-cap.set(CAP_PROP_FRAME_WIDTH, 1920);
-
 if (!video) {
-	cap.open(camera, 0);
+	cap.open(camera, CAP_V4L2);
+	cap.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'));
+	cap.set(cv::CAP_PROP_FRAME_HEIGHT, 1080);
+	cap.set(cv::CAP_PROP_FRAME_WIDTH, 1920);
 } else {
 	cap.open(file);
 }
@@ -407,9 +406,14 @@ if (!cap.isOpened()) {
 	return;
 }
 
+TickMeter tm;
+
 while (cap.read(frame) && run) {
 	cv::Mat vec;
 	cv::Mat scaled;
+
+	tm.start();
+
 	double scale = 1024.0f/frame.size().width;
 	resize(frame, scaled, Size(), scale, scale, INTER_AREA);
 
@@ -427,6 +431,10 @@ while (cap.read(frame) && run) {
 		ssm=ss.detect(scaled);
 		// imshow(kWinMask, ssm);
 	}
+
+	tm.stop();
+
+	printf("FPS: %f\n", tm.getFPS());
 
 	int key = waitKey(20);
 	switch (key) {
