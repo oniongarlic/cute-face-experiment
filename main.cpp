@@ -56,6 +56,8 @@ void softmax_(const float* x, float* y, int length);
 void generate_proposal(Mat out, vector<Rect>& boxes, vector<float>& confidences, vector< vector<Point>>& landmarks, int imgh, int imgw, float ratioh, float ratiow, int padh, int padw);
 void drawPred(float conf, int left, int top, int right, int bottom, Mat& frame, vector<Point> landmark);
 
+void check_face_focus(cv::Mat &face);
+
 MovingAverage avg_angle;
 };
 
@@ -101,23 +103,18 @@ if (this->keep_ratio && srch != srcw) {
 return dstimg;
 }
 
-void YOLOv8_face::drawPred(float conf, int left, int top, int right, int bottom, Mat& frame, vector<Point> landmark)
+void YOLOv8_face::check_face_focus(cv::Mat &face)
 {
-// Rectangle of bounding box
-cv::Rect roi(left, top, right-left, bottom-top);
-roi=roi & cv::Rect(0, 0, frame.size().width, frame.size().height);
-
-cv::Mat iroi = frame(roi);
 cv::Mat iroig, lap, lapim;
 cv::Mat edges, er;
 
 if (simulatedFocus>0) {
   double s=(double)simulatedFocus/50.0;
-  cv::GaussianBlur(iroi, iroi, Size(7, 7), s, s);
+  cv::GaussianBlur(face, face, Size(7, 7), s, s);
 }
 
 //GaussianBlur(iroi, iroi, Size(3, 3), 0, 0, BORDER_DEFAULT);
-cvtColor(iroi, iroig, COLOR_BGR2GRAY);
+cvtColor(face, iroig, COLOR_BGR2GRAY);
 equalizeHist(iroig, iroig);
 Laplacian(iroig, lap, CV_64F, 3);
 
@@ -134,13 +131,25 @@ cv::cvtColor(edges, er, COLOR_GRAY2BGR);
 er=er.mul(cv::Scalar(0, 0, 255), 1);
 
 //cv::add(iroi, er, iroi, edges);
-cv::bitwise_or(iroi, er, iroi, edges);
+cv::bitwise_or(face, er, face, edges);
 
 Scalar mean, stddev; // 0:1st channel, 1:2nd channel and 2:3rd channel
 meanStdDev(lap, mean, stddev, Mat());
 variance = stddev.val[0] * stddev.val[0];
 
 //printf("VAR: %f\n", variance);
+}
+
+
+void YOLOv8_face::drawPred(float conf, int left, int top, int right, int bottom, Mat& frame, vector<Point> landmark)
+{
+// Rectangle of bounding box
+cv::Rect roi(left, top, right-left, bottom-top);
+roi=roi & cv::Rect(0, 0, frame.size().width, frame.size().height);
+
+cv::Mat iroi = frame(roi);
+
+check_face_focus(iroi);
 
 // Eyes
 Point d = landmark[0]-landmark[1];
