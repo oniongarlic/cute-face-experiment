@@ -106,7 +106,7 @@ return dstimg;
 void YOLOv8_face::check_face_focus(cv::Mat &face)
 {
 cv::Mat iroig, lap, lapim;
-cv::Mat edges, er;
+cv::Mat edges, er, i32, r128, ci;
 
 if (simulatedFocus>0) {
   double s=(double)simulatedFocus/50.0;
@@ -114,9 +114,27 @@ if (simulatedFocus>0) {
 }
 
 //GaussianBlur(iroi, iroi, Size(3, 3), 0, 0, BORDER_DEFAULT);
-cvtColor(face, iroig, COLOR_BGR2GRAY);
+cv::cvtColor(face, iroig, COLOR_BGR2GRAY);
+
+cv::resize(iroig, r128, cv::Size(128, 128), 0, 0, INTER_AREA);
+
+r128.convertTo(i32, CV_32F);
+
+Mat planes[] = {i32, Mat::zeros(r128.size(), CV_32F)};
+merge(planes, 2, ci);
+
+cv::dft(i32, ci);
+cv::split(ci, planes);
+
+cv::Mat mag;
+cv::magnitude(planes[0], planes[1], mag);
+mag+=Scalar::all(1);
+cv::log(mag, mag);
+normalize(mag, mag, 0, 1, cv::NORM_MINMAX);
+imshow("dft", mag);
+
 equalizeHist(iroig, iroig);
-Laplacian(iroig, lap, CV_64F, 3);
+Laplacian(iroig, lap, CV_32F, 3);
 
 cv::GaussianBlur(iroig, edges, Size(7, 7), 1.5, 1.5);
 cv::Canny(edges, edges, 10, 160, 3, true);
@@ -436,8 +454,8 @@ while (cap.read(frame) && run) {
 		if (conn && embeddings) {
 			dump_face(vec, 1);
 		}
-		cv::Mat s2, ssm;
-		ssm=ss.detect(scaled);
+		//cv::Mat s2, ssm;
+		//ssm=ss.detect(scaled);
 		// imshow(kWinMask, ssm);
 	}
 
