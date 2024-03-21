@@ -107,6 +107,8 @@ void YOLOv8_face::check_face_focus(cv::Mat &face)
 {
 cv::Mat iroig, lap, lapim;
 cv::Mat edges, er, i32, r128, ci;
+Scalar emean, estddev;
+double ev;
 
 if (simulatedFocus>0) {
   double s=(double)simulatedFocus/50.0;
@@ -131,6 +133,11 @@ cv::magnitude(planes[0], planes[1], mag);
 mag+=Scalar::all(1);
 cv::log(mag, mag);
 normalize(mag, mag, 0, 1, cv::NORM_MINMAX);
+
+emean=cv::mean(mag);
+
+printf("dftMean: %f\n", emean[0]);
+
 imshow("dft", mag);
 
 equalizeHist(iroig, iroig);
@@ -139,10 +146,9 @@ Laplacian(iroig, lap, CV_32F, 3);
 cv::GaussianBlur(iroig, edges, Size(7, 7), 1.5, 1.5);
 cv::Canny(edges, edges, 10, 160, 3, true);
 
-Scalar emean, estddev;
 meanStdDev(edges, emean, estddev, Mat());
-double ev = estddev.val[0] * estddev.val[0];
-printf("eVAR: %f\n", ev);
+ev = estddev.val[0] * estddev.val[0];
+//printf("eVAR: %f\n", ev);
 
 // Red edges
 cv::cvtColor(edges, er, COLOR_GRAY2BGR);
