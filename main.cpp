@@ -416,6 +416,21 @@ if (largest>-1) {
 return largest;
 }
 
+void focus_peaking(cv::Mat &image)
+{
+cv::Mat gray, edges, er;
+
+cv::cvtColor(image, gray, COLOR_BGR2GRAY);
+
+cv::GaussianBlur(gray, edges, Size(7, 7), 1.5, 1.5);
+cv::Canny(edges, edges, 10, 160, 3, true);
+
+cv::cvtColor(edges, er, COLOR_GRAY2BGR);
+er=er.mul(cv::Scalar(0, 0, 255), 1);
+
+cv::bitwise_or(image, er, image, edges);
+}
+
 void detect_from_image(YOLOv8_face &face, OpenFace &of, const char *file)
 {
 string imgpath = file;
@@ -489,10 +504,8 @@ while (cap.read(frame) && run) {
 	resize(frame, scaled, Size(), scale, scale, INTER_AREA);
 
 	int f=face.detect(scaled);
-	imshow(kWinName, scaled);
 
-	//printf("Faces: %d\n", face.faces);
-
+	//printf("Faces: (%d) %d\n", f, face.faces);
 	if (f>0) {
 		vec=of.detect(face.theFace);
 		if (conn && embeddings) {
@@ -501,7 +514,10 @@ while (cap.read(frame) && run) {
 		//cv::Mat s2, ssm;
 		//ssm=ss.detect(scaled);
 		// imshow(kWinMask, ssm);
+	} else {
+		focus_peaking(scaled);
 	}
+	imshow(kWinName, scaled);
 
 	tm.stop();
 
