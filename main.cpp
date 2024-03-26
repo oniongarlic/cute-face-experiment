@@ -266,7 +266,7 @@ imshow(kWinRoi, theFace);
 rectangle(frame, roi, inFocus ? Scalar(0, 255, 0) : Scalar(0, 0, 255), 2);
 
 //Get the label for the class name and its confidence
-string label = format("F:%.2f E: %.1f V: %.0f", conf, angle, variance);
+string label = format("F:%.2f E: %.1f V: %.3f", conf, angle, variance);
 
 //Display the label at the top of the bounding box
 /*int baseLine;
