@@ -25,12 +25,34 @@ static const string kWinRoi = "ROI";
 static const string kWinMask = "Mask";
 
 int simulatedFocus=0;
+int peakThreshold=6;
 
 int avgc=0;
 cv::Mat p;
 cv::Mat pavg;
 
 PGconn *conn;
+
+void fftShift(const Mat &input, Mat &output)
+{
+int cx=input.cols/2;
+int cy=input.rows/2;
+
+Mat iq0(input, Rect(0, 0, cx, cy));
+Mat iq1(input, Rect(cx, 0, cx, cy));
+Mat iq2(input, Rect(0, cy, cx, cy));
+Mat iq3(input, Rect(cx, cy, cx, cy));
+
+Mat dq0(output, Rect(0, 0, cx, cy));
+Mat dq1(output, Rect(cx, 0, cx, cy));
+Mat dq2(output, Rect(0, cy, cx, cy));
+Mat dq3(output, Rect(cx, cy, cx, cy));
+
+iq3.copyTo(dq0);
+iq0.copyTo(dq3);
+iq2.copyTo(dq1);
+iq1.copyTo(dq2);
+}
 
 class YOLOv8_face
 {
@@ -57,6 +79,7 @@ void generate_proposal(Mat out, vector<Rect>& boxes, vector<float>& confidences,
 void drawPred(float conf, int left, int top, int right, int bottom, Mat& frame, vector<Point> landmark);
 
 void check_face_focus(cv::Mat &face);
+bool inFocus=false;
 
 MovingAverage avg_angle;
 };
@@ -120,6 +143,8 @@ cv::cvtColor(face, iroig, COLOR_BGR2GRAY);
 
 cv::resize(iroig, r128, cv::Size(128, 128), 0, 0, INTER_AREA);
 
+cv::equalizeHist(r128, r128);
+
 r128.convertTo(i32, CV_32F);
 
 Mat planes[] = {i32, Mat::zeros(r128.size(), CV_32F)};
@@ -128,26 +153,45 @@ merge(planes, 2, ci);
 cv::dft(i32, ci);
 cv::split(ci, planes);
 
-cv::Mat mag;
+cv::Mat mag, mags=Mat::zeros(r128.size(), CV_32F);
 cv::magnitude(planes[0], planes[1], mag);
 mag+=Scalar::all(1);
 cv::log(mag, mag);
-normalize(mag, mag, 0, 1, cv::NORM_MINMAX);
+cv::normalize(mag, mag, 0, 1, cv::NORM_MINMAX);
+fftShift(mag, mags);
 
-emean=cv::mean(mag);
+int cx=mags.cols/2;
+int cy=mags.rows/2;
+int wh=mags.rows/2/2;
 
-printf("dftMean: %f\n", emean[0]);
+Mat c(mags, cv::Rect(cx-wh, cy-wh, cx, cy));
 
-imshow("dft", mag);
+//cv::threshold(mag, mag, (float)peakThreshold/10.0, 1, 1);
+
+cv::meanStdDev(mags, emean, estddev);
+variance = estddev.val[0] * estddev.val[0];
+// emean=cv::mean(mag);
+
+printf("dftMean: %f (%f)\n", emean[0], variance);
+
+inFocus=(variance<0.01) ? true : false;
+
+imshow("dft", mags);
 
 equalizeHist(iroig, iroig);
 Laplacian(iroig, lap, CV_32F, 3);
 
+Scalar mean, stddev; // 0:1st channel, 1:2nd channel and 2:3rd channel
+cv::meanStdDev(lap, mean, stddev, Mat());
+float lvariance = stddev.val[0] * stddev.val[0];
+
+printf("lapVAR: %f\n", lvariance);
+
 cv::GaussianBlur(iroig, edges, Size(7, 7), 1.5, 1.5);
 cv::Canny(edges, edges, 10, 160, 3, true);
 
-meanStdDev(edges, emean, estddev, Mat());
-ev = estddev.val[0] * estddev.val[0];
+//cv::meanStdDev(edges, emean, estddev);
+//ev = estddev.val[0] * estddev.val[0];
 //printf("eVAR: %f\n", ev);
 
 // Red edges
@@ -156,12 +200,6 @@ er=er.mul(cv::Scalar(0, 0, 255), 1);
 
 //cv::add(iroi, er, iroi, edges);
 cv::bitwise_or(face, er, face, edges);
-
-Scalar mean, stddev; // 0:1st channel, 1:2nd channel and 2:3rd channel
-meanStdDev(lap, mean, stddev, Mat());
-variance = stddev.val[0] * stddev.val[0];
-
-//printf("VAR: %f\n", variance);
 }
 
 
@@ -225,7 +263,7 @@ theFace = dst2(froi);
 imshow(kWinRoi, theFace);
 
 //rectangle(frame, Point(left, top), Point(right, bottom), Scalar(0, 0, 255), 3);
-rectangle(frame, roi, Scalar(0, 0, 255), 3);
+rectangle(frame, roi, inFocus ? Scalar(0, 255, 0) : Scalar(0, 0, 255), 2);
 
 //Get the label for the class name and its confidence
 string label = format("F:%.2f E: %.1f V: %.0f", conf, angle, variance);
@@ -418,14 +456,14 @@ if (PQresultStatus(res) != PGRES_COMMAND_OK) {
 }
 }
 
-void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, bool video, int camera, string file="")
+void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int camera, string file="")
 {
 bool run=true;
 bool embeddings=false;
 Mat frame;
 VideoCapture cap;
 
-if (!video) {
+if (camera>-1) {
 	cap.open(camera, CAP_V4L2);
 	cap.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'));
 	cap.set(cv::CAP_PROP_FRAME_HEIGHT, 1080);
@@ -453,7 +491,7 @@ while (cap.read(frame) && run) {
 	int f=face.detect(scaled);
 	imshow(kWinName, scaled);
 
-	printf("Faces: %d\n", face.faces);
+	//printf("Faces: %d\n", face.faces);
 
 	if (f>0) {
 		vec=of.detect(face.theFace);
@@ -467,7 +505,7 @@ while (cap.read(frame) && run) {
 
 	tm.stop();
 
-	printf("FPS: %f\n", tm.getFPS());
+	// printf("FPS: %f\n", tm.getFPS());
 
 	int key = waitKey(20);
 	switch (key) {
@@ -538,6 +576,7 @@ SelfieSegment ss("/data/AI/selfie_segmenter.tflite");
 
 if (argc>1) {
 	input=argv[1];
+	camera_id=-1;
 	optind=2;
 }
 
@@ -560,12 +599,11 @@ namedWindow(kWinRoi, WINDOW_NORMAL);
 namedWindow(kWinMask, WINDOW_NORMAL);
 
 createTrackbar("Focus:", kWinName, &simulatedFocus, 400);
+createTrackbar("Threshold:", kWinName, &peakThreshold, 10);
 
 p=cv::Mat(1, 128, CV_64F);
 
-printf("Input: %s Camera: %d\n", input, camera_id);
-
-detect_from_video(face, of, ss, 0, camera_id, input ? input : "");
+detect_from_video(face, of, ss, camera_id, input ? input : "");
 
 destroyAllWindows();
 
