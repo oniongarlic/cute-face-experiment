@@ -40,6 +40,7 @@ public:
 YOLOv8_face(string modelpath, float confThreshold, float nmsThreshold);
 int detect(Mat& frame);
 cv::Mat theFace;
+cv::Rect lgbox;
 double variance = 0.0;
 int faces=0;
 
@@ -305,7 +306,7 @@ int area=96*96, largest=faces>0 ? 0 : -1;
 
 for (size_t i = 0; i < indices.size(); ++i) {
 	int idx = indices[i];
-	Rect box = boxes[idx];
+	cv::Rect box = boxes[idx];
 	int a=box.width*box.height;
 	if (a>area && confidences[idx]>0.60f) {
 		area=a;
@@ -314,7 +315,7 @@ for (size_t i = 0; i < indices.size(); ++i) {
 }
 
 if (largest>-1) {
-	Rect lgbox = boxes[largest];
+	lgbox = boxes[largest];
 	this->drawPred(confidences[largest], lgbox, srcimg, landmarks[largest]);
 }
 
@@ -380,6 +381,7 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
 {
 bool run=true;
 bool embeddings=false;
+bool peaking=true;
 Mat frame;
 VideoCapture cap;
 FocusCheck focus;
@@ -421,7 +423,8 @@ while (cap.read(frame) && run) {
 		//cv::Mat s2, ssm;
 		//ssm=ss.detect(scaled);
 		// imshow(kWinMask, ssm);
-	} else {
+    }
+	if (peaking) {
 		focus_peaking(scaled);
 	}
 	imshow(kWinName, scaled);
@@ -441,6 +444,9 @@ while (cap.read(frame) && run) {
 	break;
 	case 'e':
 		embeddings=!embeddings;
+	break;
+    case 'p':
+		peaking=!peaking;
 	break;
 	case 't':
 		embeddings=false;
