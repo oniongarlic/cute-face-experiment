@@ -15,6 +15,7 @@
 #include "openface.hpp"
 #include "moving_average.hpp"
 #include "selfiesegment.hpp"
+#include "focus_check.hpp"
 
 using namespace cv;
 using namespace dnn;
@@ -32,27 +33,6 @@ cv::Mat p;
 cv::Mat pavg;
 
 PGconn *conn;
-
-void fftShift(const Mat &input, Mat &output)
-{
-int cx=input.cols/2;
-int cy=input.rows/2;
-
-Mat iq0(input, Rect(0, 0, cx, cy));
-Mat iq1(input, Rect(cx, 0, cx, cy));
-Mat iq2(input, Rect(0, cy, cx, cy));
-Mat iq3(input, Rect(cx, cy, cx, cy));
-
-Mat dq0(output, Rect(0, 0, cx, cy));
-Mat dq1(output, Rect(cx, 0, cx, cy));
-Mat dq2(output, Rect(0, cy, cx, cy));
-Mat dq3(output, Rect(cx, cy, cx, cy));
-
-iq3.copyTo(dq0);
-iq0.copyTo(dq3);
-iq2.copyTo(dq1);
-iq1.copyTo(dq2);
-}
 
 class YOLOv8_face
 {
@@ -77,9 +57,6 @@ cv::Mat rot;
 void softmax_(const float* x, float* y, int length);
 void generate_proposal(Mat out, vector<Rect>& boxes, vector<float>& confidences, vector< vector<Point>>& landmarks, int imgh, int imgw, float ratioh, float ratiow, int padh, int padw);
 void drawPred(float conf, int left, int top, int right, int bottom, Mat& frame, vector<Point> landmark);
-
-void check_face_focus(cv::Mat &face);
-bool inFocus=false;
 
 MovingAverage avg_angle;
 };
@@ -126,83 +103,6 @@ if (this->keep_ratio && srch != srcw) {
 return dstimg;
 }
 
-void YOLOv8_face::check_face_focus(cv::Mat &face)
-{
-cv::Mat iroig, lap, lapim;
-cv::Mat edges, er, i32, r128, ci;
-Scalar emean, estddev;
-double ev;
-
-if (simulatedFocus>0) {
-  double s=(double)simulatedFocus/50.0;
-  cv::GaussianBlur(face, face, Size(7, 7), s, s);
-}
-
-//GaussianBlur(iroi, iroi, Size(3, 3), 0, 0, BORDER_DEFAULT);
-cv::cvtColor(face, iroig, COLOR_BGR2GRAY);
-
-cv::resize(iroig, r128, cv::Size(128, 128), 0, 0, INTER_AREA);
-
-cv::equalizeHist(r128, r128);
-
-r128.convertTo(i32, CV_32F);
-
-Mat planes[] = {i32, Mat::zeros(r128.size(), CV_32F)};
-merge(planes, 2, ci);
-
-cv::dft(i32, ci);
-cv::split(ci, planes);
-
-cv::Mat mag, mags=Mat::zeros(r128.size(), CV_32F);
-cv::magnitude(planes[0], planes[1], mag);
-mag+=Scalar::all(1);
-cv::log(mag, mag);
-cv::normalize(mag, mag, 0, 1, cv::NORM_MINMAX);
-fftShift(mag, mags);
-
-int cx=mags.cols/2;
-int cy=mags.rows/2;
-int wh=mags.rows/2/2;
-
-Mat c(mags, cv::Rect(cx-wh, cy-wh, cx, cy));
-
-//cv::threshold(mag, mag, (float)peakThreshold/10.0, 1, 1);
-
-cv::meanStdDev(mags, emean, estddev);
-variance = estddev.val[0] * estddev.val[0];
-// emean=cv::mean(mag);
-
-printf("dftMean: %f (%f)\n", emean[0], variance);
-
-inFocus=(variance<0.01) ? true : false;
-
-imshow("dft", mags);
-
-equalizeHist(iroig, iroig);
-Laplacian(iroig, lap, CV_32F, 3);
-
-Scalar mean, stddev; // 0:1st channel, 1:2nd channel and 2:3rd channel
-cv::meanStdDev(lap, mean, stddev, Mat());
-float lvariance = stddev.val[0] * stddev.val[0];
-
-printf("lapVAR: %f\n", lvariance);
-
-cv::GaussianBlur(iroig, edges, Size(7, 7), 1.5, 1.5);
-cv::Canny(edges, edges, 10, 160, 3, true);
-
-//cv::meanStdDev(edges, emean, estddev);
-//ev = estddev.val[0] * estddev.val[0];
-//printf("eVAR: %f\n", ev);
-
-// Red edges
-cv::cvtColor(edges, er, COLOR_GRAY2BGR);
-er=er.mul(cv::Scalar(0, 0, 255), 1);
-
-//cv::add(iroi, er, iroi, edges);
-cv::bitwise_or(face, er, face, edges);
-}
-
-
 void YOLOv8_face::drawPred(float conf, int left, int top, int right, int bottom, Mat& frame, vector<Point> landmark)
 {
 // Rectangle of bounding box
@@ -210,8 +110,6 @@ cv::Rect roi(left, top, right-left, bottom-top);
 roi=roi & cv::Rect(0, 0, frame.size().width, frame.size().height);
 
 cv::Mat iroi = frame(roi);
-
-check_face_focus(iroi);
 
 // Eyes
 Point d = landmark[0]-landmark[1];
@@ -263,7 +161,8 @@ theFace = dst2(froi);
 imshow(kWinRoi, theFace);
 
 //rectangle(frame, Point(left, top), Point(right, bottom), Scalar(0, 0, 255), 3);
-rectangle(frame, roi, inFocus ? Scalar(0, 255, 0) : Scalar(0, 0, 255), 2);
+//rectangle(frame, roi, inFocus ? Scalar(0, 255, 0) : Scalar(0, 0, 255), 2);
+rectangle(frame, roi, Scalar(0, 0, 255), 2);
 
 //Get the label for the class name and its confidence
 string label = format("F:%.2f E: %.1f V: %.3f", conf, angle, variance);
@@ -477,6 +376,7 @@ bool run=true;
 bool embeddings=false;
 Mat frame;
 VideoCapture cap;
+FocusCheck focus;
 
 if (camera>-1) {
 	cap.open(camera, CAP_V4L2);
@@ -507,6 +407,7 @@ while (cap.read(frame) && run) {
 
 	//printf("Faces: (%d) %d\n", f, face.faces);
 	if (f>0) {
+        focus.isFocused(face.theFace, true);
 		vec=of.detect(face.theFace);
 		if (conn && embeddings) {
 			dump_face(vec, 1);
