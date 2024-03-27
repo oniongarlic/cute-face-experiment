@@ -322,17 +322,17 @@ if (largest>-1) {
 return largest;
 }
 
-void focus_peaking(cv::Mat &image)
+void focus_peaking(cv::Mat &image, bool inFocus)
 {
 cv::Mat gray, edges, er;
 
 cv::cvtColor(image, gray, COLOR_BGR2GRAY);
 
-cv::GaussianBlur(gray, edges, Size(7, 7), 1.5, 1.5);
+cv::GaussianBlur(gray, edges, Size(3, 3), 1.5, 1.5);
 cv::Canny(edges, edges, 10, 160, 3, true);
 
 cv::cvtColor(edges, er, COLOR_GRAY2BGR);
-er=er.mul(cv::Scalar(0, 0, 255), 1);
+er=er.mul(inFocus ? cv::Scalar(0, 255, 0) : cv::Scalar(0, 0, 255), 1);
 
 cv::bitwise_or(image, er, image, edges);
 }
@@ -425,7 +425,7 @@ while (cap.read(frame) && run) {
 		// imshow(kWinMask, ssm);
     }
 	if (peaking) {
-		focus_peaking(scaled);
+		focus_peaking(scaled, focus.inFocus);
 	}
 	imshow(kWinName, scaled);
 
