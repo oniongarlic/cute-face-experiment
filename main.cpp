@@ -54,9 +54,14 @@ const int num_class = 1;
 const int reg_max = 16;
 Net net;
 cv::Mat rot;
+
+vector<cv::Rect> boxes;
+vector<float> confidences;
+vector< vector<cv::Point>> landmarks;
+
 void softmax_(const float* x, float* y, int length);
-void generate_proposal(Mat out, vector<Rect>& boxes, vector<float>& confidences, vector< vector<Point>>& landmarks, int imgh, int imgw, float ratioh, float ratiow, int padh, int padw);
-void drawPred(float conf, int left, int top, int right, int bottom, Mat& frame, vector<Point> landmark);
+void generate_proposal(Mat out, int imgh, int imgw, float ratioh, float ratiow, int padh, int padw);
+void drawPred(float conf, cv::Rect &roi, Mat& frame, vector<Point> landmark);
 
 MovingAverage avg_angle;
 };
@@ -103,10 +108,10 @@ if (this->keep_ratio && srch != srcw) {
 return dstimg;
 }
 
-void YOLOv8_face::drawPred(float conf, int left, int top, int right, int bottom, Mat& frame, vector<Point> landmark)
+void YOLOv8_face::drawPred(float conf, cv::Rect &roi, Mat& frame, vector<Point> landmark)
 {
 // Rectangle of bounding box
-cv::Rect roi(left, top, right-left, bottom-top);
+//cv::Rect roi(left, top, right-left, bottom-top);
 roi=roi & cv::Rect(0, 0, frame.size().width, frame.size().height);
 
 cv::Mat iroi = frame(roi);
@@ -173,7 +178,7 @@ Size labelSize = getTextSize(label, FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseLine);
 top = max(top, labelSize.height);
 rectangle(frame, Point(left, top - int(1.5 * labelSize.height)), Point(left + int(1.5 * labelSize.width), top + baseLine), Scalar(0, 255, 0), FILLED);*/
 
-putText(frame, label, Point(left, top-5), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(0, 255, 0), 1);
+putText(frame, label, Point(roi.x, roi.y-5), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(0, 255, 0), 1);
 // Eyes
 circle(frame, landmark[0], 2, Scalar(255, 0, 0), 2);
 circle(frame, landmark[1], 2, Scalar(255, 0, 0), 2);
@@ -202,7 +207,7 @@ for (i = 0; i < length; i++) {
 }
 }
 
-void YOLOv8_face::generate_proposal(Mat out, vector<Rect>& boxes, vector<float>& confidences, vector< vector<Point>>& landmarks, int imgh,int imgw, float ratioh, float ratiow, int padh, int padw)
+void YOLOv8_face::generate_proposal(Mat out, int imgh,int imgw, float ratioh, float ratiow, int padh, int padw)
 {
 const int feat_h = out.size[2];
 const int feat_w = out.size[3];
@@ -269,30 +274,31 @@ for (int i = 0; i < feat_h; i++) {
 int YOLOv8_face::detect(Mat& srcimg)
 {
 int newh = 0, neww = 0, padh = 0, padw = 0;
-Mat dst = this->resize_image(srcimg, &newh, &neww, &padh, &padw);
-Mat blob;
+cv::Mat dst = this->resize_image(srcimg, &newh, &neww, &padh, &padw);
+cv::Mat blob;
 
-blobFromImage(dst, blob, 1 / 255.0, Size(this->inpWidth, this->inpHeight), Scalar(0, 0, 0), true, false);
+cv::dnn::blobFromImage(dst, blob, 1 / 255.0, Size(this->inpWidth, this->inpHeight), Scalar(0, 0, 0), true, false);
 this->net.setInput(blob);
 
-vector<Mat> outs;
+vector<cv::Mat> outs;
 // this->net.enableWinograd(false);
 this->net.forward(outs, this->net.getUnconnectedOutLayersNames());
 
-/////generate proposals
-vector<Rect> boxes;
-vector<float> confidences;
-vector< vector<Point>> landmarks;
-float ratioh = (float)srcimg.rows / newh, ratiow = (float)srcimg.cols / neww;
+boxes.clear();
+confidences.clear();
+landmarks.clear();
 
-generate_proposal(outs[0], boxes, confidences, landmarks, srcimg.rows, srcimg.cols, ratioh, ratiow, padh, padw);
-generate_proposal(outs[1], boxes, confidences, landmarks, srcimg.rows, srcimg.cols, ratioh, ratiow, padh, padw);
-generate_proposal(outs[2], boxes, confidences, landmarks, srcimg.rows, srcimg.cols, ratioh, ratiow, padh, padw);
+float ratioh = (float)srcimg.rows / newh;
+float ratiow = (float)srcimg.cols / neww;
+
+generate_proposal(outs[0], srcimg.rows, srcimg.cols, ratioh, ratiow, padh, padw);
+generate_proposal(outs[1], srcimg.rows, srcimg.cols, ratioh, ratiow, padh, padw);
+generate_proposal(outs[2], srcimg.rows, srcimg.cols, ratioh, ratiow, padh, padw);
 
 // Perform non maximum suppression to eliminate redundant overlapping boxes with
 // lower confidences
 vector<int> indices;
-NMSBoxes(boxes, confidences, this->confThreshold, this->nmsThreshold, indices);
+cv::dnn::NMSBoxes(boxes, confidences, this->confThreshold, this->nmsThreshold, indices);
 faces=indices.size();
 
 int area=96*96, largest=faces>0 ? 0 : -1;
@@ -308,8 +314,8 @@ for (size_t i = 0; i < indices.size(); ++i) {
 }
 
 if (largest>-1) {
-	Rect box = boxes[largest];
-	this->drawPred(confidences[largest], box.x, box.y, box.x + box.width, box.y + box.height, srcimg, landmarks[largest]);
+	Rect lgbox = boxes[largest];
+	this->drawPred(confidences[largest], lgbox, srcimg, landmarks[largest]);
 }
 
 return largest;
