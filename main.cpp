@@ -26,7 +26,8 @@ static const string kWinRoi = "ROI";
 static const string kWinMask = "Mask";
 
 int simulatedFocus=0;
-int peakThreshold=6;
+int imageBrightness=0;
+int imageContrast=33;
 
 int avgc=0;
 cv::Mat p;
@@ -429,12 +430,16 @@ while (cap.read(frame) && run) {
 	double scale = 1024.0f/frame.size().width;
 	resize(frame, scaled, Size(), scale, scale, INTER_AREA);
 
+	scaled.convertTo(scaled, -1, (float)imageContrast/33.0, imageBrightness);
+
 	int f=face.detect(scaled);
 
 	if (f>0) {
 		int i=face.getLargestFace();
 		cv::Mat theFace=face.getFaceMat(i, scaled);
 		focus.simulatedFocus=simulatedFocus;
+
+
 		focus.isFocused(theFace, peaking);
 		if (embeddings) {
 			vec=of.detect(theFace);
@@ -553,7 +558,8 @@ namedWindow(kWinRoi, WINDOW_NORMAL);
 //namedWindow(kWinMask, WINDOW_NORMAL);
 
 createTrackbar("Focus:", kWinName, &simulatedFocus, 400);
-createTrackbar("Threshold:", kWinName, &peakThreshold, 10);
+createTrackbar("Contrast:", kWinName, &imageContrast, 100);
+createTrackbar("Brightness:", kWinName, &imageBrightness, 100);
 
 p=cv::Mat(1, 128, CV_64F);
 
