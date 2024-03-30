@@ -9,4 +9,5 @@ float variance=0.0;
 float lvariance=0.0;
 int simulatedFocus=0;
 bool inFocus=false;
+cv::Mat fft;
 };

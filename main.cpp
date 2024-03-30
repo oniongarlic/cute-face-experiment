@@ -42,10 +42,19 @@ int detect(Mat& frame);
 cv::Mat theFace;
 cv::Rect lgbox;
 double variance = 0.0;
-int faces=0;
+int faceCount=0;
+
+void drawPred(cv::Mat &frame, int faceIndex);
+void getRotatedFace(const cv::Mat& frame, cv::Mat &output, const cv::Rect &roi, const vector<Point> landmark);
+int getLargestFace();
+
+cv::Rect getFace(int idx) { return boxes[faces[idx]]; }
+cv::Mat getFaceMat(int idx, const cv::Mat &frame);
+float getFaceConfidence(int idx) { return confidences[faces[idx]]; }
+vector<cv::Point> getFaceLandmarks(int idx) { return landmarks[faces[idx]]; };
 
 private:
-Mat resize_image(Mat srcimg, int *newh, int *neww, int *padh, int *padw);
+Mat resize_image(const cv::Mat srcimg, int *newh, int *neww, int *padh, int *padw);
 const bool keep_ratio = true;
 const int inpWidth = 640;
 const int inpHeight = 640;
@@ -53,16 +62,16 @@ float confThreshold;
 float nmsThreshold;
 const int num_class = 1;
 const int reg_max = 16;
-Net net;
+cv::dnn::Net net;
 cv::Mat rot;
 
 vector<cv::Rect> boxes;
 vector<float> confidences;
 vector< vector<cv::Point>> landmarks;
+vector<int> faces;
 
 void softmax_(const float* x, float* y, int length);
-void generate_proposal(Mat out, int imgh, int imgw, float ratioh, float ratiow, int padh, int padw);
-void drawPred(float conf, cv::Rect &roi, Mat& frame, vector<Point> landmark);
+void generate_proposal(const Mat &out, int imgh, int imgw, float ratioh, float ratiow, int padh, int padw);
 
 MovingAverage avg_angle;
 };
@@ -82,7 +91,7 @@ net.setPreferableBackend(cv::dnn::DNN_BACKEND_CUDA);
 net.setPreferableTarget(cv::dnn::DNN_TARGET_CUDA);
 }
 
-Mat YOLOv8_face::resize_image(Mat srcimg, int *newh, int *neww, int *padh, int *padw)
+Mat YOLOv8_face::resize_image(const cv::Mat srcimg, int *newh, int *neww, int *padh, int *padw)
 {
 int srch = srcimg.rows, srcw = srcimg.cols;
 *newh = this->inpHeight;
@@ -109,14 +118,8 @@ if (this->keep_ratio && srch != srcw) {
 return dstimg;
 }
 
-void YOLOv8_face::drawPred(float conf, cv::Rect &roi, Mat& frame, vector<Point> landmark)
+void YOLOv8_face::getRotatedFace(const cv::Mat& frame, cv::Mat &output, const cv::Rect &roi, const vector<Point> landmark)
 {
-// Rectangle of bounding box
-//cv::Rect roi(left, top, right-left, bottom-top);
-roi=roi & cv::Rect(0, 0, frame.size().width, frame.size().height);
-
-cv::Mat iroi = frame(roi);
-
 // Eyes
 Point d = landmark[0]-landmark[1];
 float angle = (atan2f((float)d.y, (float)d.x) * 180.f / CV_PI) - 180.f + 360.f;
@@ -144,11 +147,7 @@ rot=getRotationMatrix2D(center, angle, 1.0);
 rot.at<double>(0,2) += bbox.width/2.0 - nose.x;
 rot.at<double>(1,2) += bbox.height/2.0 - nose.y;
 
-//	convertScaleAbs(lap, lapim);
-
-//cv::Mat theface = frame(bbox);
-
-Mat dst2;
+cv::Mat dst2;
 warpAffine(frame, dst2, rot, bbox.size(), INTER_CUBIC);
 
 int fx,fy,wh, fhw, fhh;
@@ -163,15 +162,35 @@ cv::Rect froi(fx, fy, fhw, fhh);
 // Make sure we keep froi inside the frame
 froi=froi & cv::Rect(0, 0, dst2.size().width, dst2.size().height);
 
-theFace = dst2(froi);
-imshow(kWinRoi, theFace);
+output=dst2(froi);
+}
+
+cv::Mat YOLOv8_face::getFaceMat(int idx, const cv::Mat &frame)
+{
+cv::Rect roi=boxes[idx];
+roi=roi & cv::Rect(0, 0, frame.size().width, frame.size().height);
+return frame(roi);
+}
+
+void YOLOv8_face::drawPred(cv::Mat &frame, int faceIndex)
+{
+float conf=confidences[faceIndex];
+vector<Point> landmark=landmarks[faceIndex];
+cv::Rect roi=boxes[faceIndex];
+
+// Rectangle of bounding box
+roi=roi & cv::Rect(0, 0, frame.size().width, frame.size().height);
+
+cv::Mat iroi = frame(roi);
+
+theFace = frame(roi);
 
 //rectangle(frame, Point(left, top), Point(right, bottom), Scalar(0, 0, 255), 3);
 //rectangle(frame, roi, inFocus ? Scalar(0, 255, 0) : Scalar(0, 0, 255), 2);
 rectangle(frame, roi, Scalar(0, 0, 255), 2);
 
 //Get the label for the class name and its confidence
-string label = format("F:%.2f E: %.1f V: %.3f", conf, angle, variance);
+string label = format("F:%.2f", conf);
 
 //Display the label at the top of the bounding box
 /*int baseLine;
@@ -181,17 +200,16 @@ rectangle(frame, Point(left, top - int(1.5 * labelSize.height)), Point(left + in
 
 putText(frame, label, Point(roi.x, roi.y-5), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(0, 255, 0), 1);
 // Eyes
-circle(frame, landmark[0], 2, Scalar(255, 0, 0), 2);
-circle(frame, landmark[1], 2, Scalar(255, 0, 0), 2);
+circle(frame, landmark[0], 2, Scalar(255, 0, 0), 1);
+circle(frame, landmark[1], 2, Scalar(255, 0, 0), 1);
 line(frame, landmark[0], landmark[1], Scalar(0, 255, 0));
 
 // Nose
 circle(frame, landmark[2], 8, Scalar(0, 255, 255), 1);
-circle(frame, center, 8, Scalar(128, 128, 255), 2);
 
 // Mouth
-circle(frame, landmark[3], 2, Scalar(0, 255, 255), 2);
-circle(frame, landmark[4], 2, Scalar(0, 255, 255), 2);
+circle(frame, landmark[3], 2, Scalar(0, 255, 255), 1);
+circle(frame, landmark[4], 2, Scalar(0, 255, 255), 1);
 line(frame, landmark[3], landmark[4], Scalar(0, 255, 0));
 }
 
@@ -200,7 +218,7 @@ void YOLOv8_face::softmax_(const float* x, float* y, int length)
 float sum = 0;
 int i = 0;
 for (i = 0; i < length; i++) {
-	y[i] = exp(x[i]);
+	y[i] = expf(x[i]);
 	sum += y[i];
 }
 for (i = 0; i < length; i++) {
@@ -208,7 +226,7 @@ for (i = 0; i < length; i++) {
 }
 }
 
-void YOLOv8_face::generate_proposal(Mat out, int imgh,int imgw, float ratioh, float ratiow, int padh, int padw)
+void YOLOv8_face::generate_proposal(const Mat &out, int imgh,int imgw, float ratioh, float ratiow, int padh, int padw)
 {
 const int feat_h = out.size[2];
 const int feat_w = out.size[3];
@@ -288,6 +306,7 @@ this->net.forward(outs, this->net.getUnconnectedOutLayersNames());
 boxes.clear();
 confidences.clear();
 landmarks.clear();
+faces.clear();
 
 float ratioh = (float)srcimg.rows / newh;
 float ratiow = (float)srcimg.cols / neww;
@@ -298,25 +317,24 @@ generate_proposal(outs[2], srcimg.rows, srcimg.cols, ratioh, ratiow, padh, padw)
 
 // Perform non maximum suppression to eliminate redundant overlapping boxes with
 // lower confidences
-vector<int> indices;
-cv::dnn::NMSBoxes(boxes, confidences, this->confThreshold, this->nmsThreshold, indices);
-faces=indices.size();
+cv::dnn::NMSBoxes(boxes, confidences, this->confThreshold, this->nmsThreshold, faces);
+faceCount=faces.size();
 
-int area=96*96, largest=faces>0 ? 0 : -1;
+return faceCount;
+}
 
-for (size_t i = 0; i < indices.size(); ++i) {
-	int idx = indices[i];
-	cv::Rect box = boxes[idx];
+int YOLOv8_face::getLargestFace()
+{
+int area=96*96, largest=faceCount>0 ? 0 : -1;
+
+for (size_t i = 0; i < faces.size(); ++i) {
+	int idx = faces[i];
+	const cv::Rect box = boxes[idx];
 	int a=box.width*box.height;
 	if (a>area && confidences[idx]>0.60f) {
 		area=a;
 		largest=idx;
 	}
-}
-
-if (largest>-1) {
-	lgbox = boxes[largest];
-	this->drawPred(confidences[largest], lgbox, srcimg, landmarks[largest]);
 }
 
 return largest;
@@ -413,25 +431,32 @@ while (cap.read(frame) && run) {
 
 	int f=face.detect(scaled);
 
-	//printf("Faces: (%d) %d\n", f, face.faces);
 	if (f>0) {
-        focus.isFocused(face.theFace, true);
-		vec=of.detect(face.theFace);
+		int i=face.getLargestFace();
+		cv::Mat theFace=face.getFaceMat(i, scaled);
+		focus.simulatedFocus=simulatedFocus;
+		focus.isFocused(theFace, peaking);
+		if (embeddings) {
+			vec=of.detect(theFace);
+		}
 		if (conn && embeddings) {
 			dump_face(vec, 1);
 		}
 		//cv::Mat s2, ssm;
 		//ssm=ss.detect(scaled);
 		// imshow(kWinMask, ssm);
-    }
-	if (peaking) {
+
+		face.drawPred(scaled, i);
+
+	} else if (peaking) {
 		focus_peaking(scaled, focus.inFocus);
 	}
+
 	imshow(kWinName, scaled);
 
 	tm.stop();
 
-	// printf("FPS: %f\n", tm.getFPS());
+	printf("FPS: %f, Faces: (%d) %d\n", tm.getFPS(), f, face.faceCount);
 
 	int key = waitKey(20);
 	switch (key) {
@@ -445,7 +470,7 @@ while (cap.read(frame) && run) {
 	case 'e':
 		embeddings=!embeddings;
 	break;
-    case 'p':
+	case 'p':
 		peaking=!peaking;
 	break;
 	case 't':
@@ -525,7 +550,7 @@ connect_db(dbopts);
 
 namedWindow(kWinName, WINDOW_NORMAL);
 namedWindow(kWinRoi, WINDOW_NORMAL);
-namedWindow(kWinMask, WINDOW_NORMAL);
+//namedWindow(kWinMask, WINDOW_NORMAL);
 
 createTrackbar("Focus:", kWinName, &simulatedFocus, 400);
 createTrackbar("Threshold:", kWinName, &peakThreshold, 10);

@@ -36,8 +36,8 @@ double ev;
 cv::Size sDft=cv::Size(128, 128);
 
 if (simulatedFocus>0) {
-  double s=(double)simulatedFocus/50.0;
-  cv::GaussianBlur(face, face, cv::Size(7, 7), s, s);
+	double s=(double)simulatedFocus/50.0;
+	cv::GaussianBlur(face, face, cv::Size(7, 7), s, s);
 }
 
 cv::cvtColor(face, iroig, cv::COLOR_BGR2GRAY);
@@ -75,14 +75,13 @@ float hvariance = estddev.val[0] * estddev.val[0];
 
 cv::meanStdDev(mags, emean, estddev);
 variance = estddev.val[0] * estddev.val[0];
-// emean=cv::mean(mag);
 
 printf("dftMean: %f (%f)-(%f)\n", emean[0], variance, hvariance);
 
 inFocus=(variance<focusThreshold) ? true : false;
 
-//imshow("dftRaw", mag);
-//imshow("dftShift", mags);
+cv::imshow("dftRaw", mag);
+cv::imshow("dftShift", mags);
 
 cv::equalizeHist(iroig, iroig);
 cv::Laplacian(iroig, lap, CV_32F, 3);
@@ -95,7 +94,7 @@ printf("lapVAR: %f\n", lvariance);
 
 // Red edges
 if (peaking) {
-    cv::GaussianBlur(iroig, edges, cv::Size(7, 7), 1.5, 1.5);
+    cv::GaussianBlur(iroig, edges, cv::Size(3, 3), 1.5, 1.5);
     cv::Canny(edges, edges, 10, 160, 3, true);
     cv::cvtColor(edges, er, cv::COLOR_GRAY2BGR);
     er=er.mul(cv::Scalar(0, 0, 255), 1);
