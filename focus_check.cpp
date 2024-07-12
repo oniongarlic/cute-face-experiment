@@ -95,7 +95,7 @@ printf("lapVAR: %f\n", lvariance);
 // Red edges
 if (peaking) {
     cv::GaussianBlur(iroig, edges, cv::Size(3, 3), 1.5, 1.5);
-    cv::Canny(edges, edges, 10, 160, 3, true);
+    cv::Canny(edges, edges, 100, 300, 3, true);
     cv::cvtColor(edges, er, cv::COLOR_GRAY2BGR);
     er=er.mul(cv::Scalar(0, 0, 255), 1);
     cv::bitwise_or(face, er, face, edges);
