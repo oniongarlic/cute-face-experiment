@@ -94,11 +94,20 @@ printf("lapVAR: %f\n", lvariance);
 
 // Red edges
 if (peaking) {
+    std::vector<std::vector<cv::Point>> contours;
+    std::vector<cv::Vec4i> hierarchy;
+
     cv::GaussianBlur(iroig, edges, cv::Size(3, 3), 1.5, 1.5);
     cv::Canny(edges, edges, 100, 300, 3, true);
+
+#if 1
+    cv::findContours(edges, contours, hierarchy, cv::RETR_TREE, cv::CHAIN_APPROX_SIMPLE);
+    cv::drawContours(face, contours, -1, cv::Scalar(0,0,255), 1);
+#else
     cv::cvtColor(edges, er, cv::COLOR_GRAY2BGR);
     er=er.mul(cv::Scalar(0, 0, 255), 1);
     cv::bitwise_or(face, er, face, edges);
+#endif
 }
 
 return inFocus;
