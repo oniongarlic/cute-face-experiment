@@ -12,6 +12,8 @@
 
 #include <libpq-fe.h>
 
+#include <mosquitto.h>
+
 #include "openface.hpp"
 #include "moving_average.hpp"
 #include "selfiesegment.hpp"
@@ -25,6 +27,11 @@ static const string kWinName = "Face detection use OpenCV";
 static const string kWinRoi = "ROI";
 static const string kWinMask = "Mask";
 
+static struct mosquitto *mqtt=NULL;
+const char *mqtt_host="localhost";
+const char *mqtt_clientid="face-detecor";
+const char *mqtt_topic_prefix="video/0/facedetect";
+
 int simulatedFocus=0;
 int imageBrightness=0;
 int imageContrast=33;
@@ -37,6 +44,16 @@ PGconn *conn;
 
 int skip_frame=0;
 
+class Face
+{
+public:
+    Point center;
+    Point nose;
+    Point mouth;
+
+    int area;
+};
+
 class YOLOv8_face
 {
 public:
@@ -46,6 +63,7 @@ public:
     cv::Rect lgbox;
     double variance = 0.0;
     int faceCount=0;
+    double faceArea=0; // normalized 0-1
 
     void drawPred(cv::Mat &frame, int faceIndex);
     void getRotatedFace(const cv::Mat& frame, cv::Mat &output, const cv::Rect &roi, const vector<Point> landmark);
@@ -55,18 +73,25 @@ public:
     cv::Mat getFaceMat(int idx, const cv::Mat &frame);
     float getFaceConfidence(int idx) { return confidences[faces[idx]]; }
     vector<cv::Point> getFaceLandmarks(int idx) { return landmarks[faces[idx]]; };
+    cv::Point2f getNosePosition(int faceIndex);
 
 private:
-    Mat resize_image(const cv::Mat srcimg, int *newh, int *neww, int *padh, int *padw);
+    cv::Mat resize_image(const cv::Mat srcimg, int *newh, int *neww, int *padh, int *padw);
+
     const bool keep_ratio = true;
     const int inpWidth = 640;
     const int inpHeight = 640;
+    const double inpArea=inpWidth*inpHeight;
+
     float confThreshold;
     float nmsThreshold;
     const int num_class = 1;
     const int reg_max = 16;
     cv::dnn::Net net;
     cv::Mat rot;
+
+    float srcRatioh;
+    float srcRatiow;
 
     vector<cv::Rect> boxes;
     vector<float> confidences;
@@ -175,6 +200,20 @@ cv::Mat YOLOv8_face::getFaceMat(int idx, const cv::Mat &frame)
     return frame(roi);
 }
 
+
+cv::Point2f YOLOv8_face::getNosePosition(int faceIndex)
+{
+    vector<Point> l=landmarks[faceIndex];
+
+    cv::Point n=l[2];
+    cv::Point2f nose;
+
+    nose.x=((float)n.x/srcRatiow)-0.5f;
+    nose.y=((float)n.y/srcRatioh)-0.5f;
+
+    return nose;
+}
+
 void YOLOv8_face::drawPred(cv::Mat &frame, int faceIndex)
 {
     float conf=confidences[faceIndex];
@@ -229,7 +268,7 @@ void YOLOv8_face::softmax_(const float* x, float* y, int length)
     }
 }
 
-void YOLOv8_face::generate_proposal(const Mat &out, int imgh,int imgw, float ratioh, float ratiow, int padh, int padw)
+void YOLOv8_face::generate_proposal(const Mat &out, int imgh, int imgw, float ratioh, float ratiow, int padh, int padw)
 {
     const int feat_h = out.size[2];
     const int feat_w = out.size[3];
@@ -293,7 +332,7 @@ void YOLOv8_face::generate_proposal(const Mat &out, int imgh,int imgw, float rat
     }
 }
 
-int YOLOv8_face::detect(Mat& srcimg)
+int YOLOv8_face::detect(cv::Mat& srcimg)
 {
     int newh = 0, neww = 0, padh = 0, padw = 0;
     cv::Mat dst = this->resize_image(srcimg, &newh, &neww, &padh, &padw);
@@ -311,12 +350,15 @@ int YOLOv8_face::detect(Mat& srcimg)
     landmarks.clear();
     faces.clear();
 
-    float ratioh = (float)srcimg.rows / newh;
-    float ratiow = (float)srcimg.cols / neww;
+    srcRatioh=srcimg.rows;
+    srcRatiow=srcimg.cols;
 
-    generate_proposal(outs[0], srcimg.rows, srcimg.cols, ratioh, ratiow, padh, padw);
-    generate_proposal(outs[1], srcimg.rows, srcimg.cols, ratioh, ratiow, padh, padw);
-    generate_proposal(outs[2], srcimg.rows, srcimg.cols, ratioh, ratiow, padh, padw);
+    float rh = (float)srcimg.rows / newh;
+    float rw = (float)srcimg.cols / neww;
+
+    generate_proposal(outs[0], srcimg.rows, srcimg.cols, rh, rw, padh, padw);
+    generate_proposal(outs[1], srcimg.rows, srcimg.cols, rh, rw, padh, padw);
+    generate_proposal(outs[2], srcimg.rows, srcimg.cols, rh, rw, padh, padw);
 
     // Perform non maximum suppression to eliminate redundant overlapping boxes with
     // lower confidences
@@ -339,6 +381,8 @@ int YOLOv8_face::getLargestFace()
             largest=idx;
         }
     }
+
+    faceArea=area/inpArea;
 
     return largest;
 }
@@ -397,6 +441,39 @@ void dump_face(Mat vec, int faceid)
         // exit(2);
     }
 }
+
+int mqtt_publish_info_topic_point(struct mosquitto *mqtt, const char *prefix, const char *topic, cv::Point2f p, float area)
+{
+int r;
+char ftopic[80];
+char data[256];
+
+snprintf(ftopic, sizeof(ftopic), "%s/%s", prefix, topic);
+snprintf(data, sizeof(data), "{\"face\": [%f,%f,%f]}", p.x, p.y, area);
+
+r=mosquitto_publish(mqtt, NULL, ftopic, strlen(data), data, 0, false);
+if (r!=MOSQ_ERR_SUCCESS)
+	fprintf(stderr, "MQTT Publish for info [%s] failed with %s\n", topic, mosquitto_strerror(r));
+
+return r;
+}
+
+int mqtt_publish_info_topic_int(struct mosquitto *mqtt, const char *prefix, const char *topic, int value)
+{
+int r;
+char ftopic[80];
+char data[256];
+
+snprintf(ftopic, sizeof(ftopic), "%s/%s", prefix, topic);
+snprintf(data, sizeof(data), "%d", value);
+
+r=mosquitto_publish(mqtt, NULL, ftopic, strlen(data), data, 0, false);
+if (r!=MOSQ_ERR_SUCCESS)
+	fprintf(stderr, "MQTT Publish for info [%s] failed with %s\n", topic, mosquitto_strerror(r));
+
+return r;
+}
+
 
 void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int camera, string file="")
 {
@@ -460,9 +537,20 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
                 //ssm=ss.detect(scaled);
                 // imshow(kWinMask, ssm);
 
+                auto n=face.getNosePosition(i);
+                mqtt_publish_info_topic_point(mqtt, mqtt_topic_prefix, "face", n, face.faceArea);
+
+                printf("Face size: %f (%f, %f)\n", face.faceArea, n.x, n.y);
+
                 face.drawPred(scaled, i);
 
-            } else if (peaking) {
+            } else {
+                int r;
+		const char *ja="{}";
+                r=mosquitto_publish(mqtt, NULL, "video/0/facedetect/face", strlen(ja), ja, 0, false);
+            }
+
+            if (f==0 && peaking) {
                 focus_peaking(scaled, focus.inFocus);
             }
         }
@@ -532,6 +620,29 @@ int connect_db(char *cinfo)
     return 0;
 }
 
+void mqtt_log_callback(struct mosquitto *m, void *userdata, int level, const char *str)
+{
+fprintf(stderr, "[MQTT-%d] %s\n", level, str);
+}
+
+int connect_mqtt(void)
+{
+int port = 1883;
+int keepalive = 120;
+bool clean_session = true;
+
+mqtt=mosquitto_new(mqtt_clientid, clean_session, NULL);
+mosquitto_log_callback_set(mqtt, mqtt_log_callback);
+
+printf("Connecting to MQTT...\n");
+
+if (mosquitto_connect(mqtt, mqtt_host, port, keepalive)) {
+	fprintf(stderr, "Unable to connect.\n");
+	return -1;
+}
+return 0;
+}
+
 int main(int argc, char **argv)
 {
     int opt,camera_id=0;
@@ -564,6 +675,10 @@ int main(int argc, char **argv)
     printf("Camera: %d, skip: %d\n", camera_id, skip_frame);
     connect_db(dbopts);
 
+mosquitto_lib_init();
+connect_mqtt();
+
+
     namedWindow(kWinName, WINDOW_NORMAL);
     namedWindow(kWinRoi, WINDOW_NORMAL);
     //namedWindow(kWinMask, WINDOW_NORMAL);
@@ -580,6 +695,9 @@ int main(int argc, char **argv)
 
     if (conn)
         PQfinish(conn);
+
+mosquitto_destroy(mqtt);
+mosquitto_lib_cleanup();
 
     return 0;
 }

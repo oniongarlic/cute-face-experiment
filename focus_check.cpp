@@ -76,7 +76,7 @@ float hvariance = estddev.val[0] * estddev.val[0];
 cv::meanStdDev(mags, emean, estddev);
 variance = estddev.val[0] * estddev.val[0];
 
-printf("dftMean: %f (%f)-(%f)\n", emean[0], variance, hvariance);
+// printf("dftMean: %f (%f)-(%f)\n", emean[0], variance, hvariance);
 
 inFocus=(variance<focusThreshold) ? true : false;
 
@@ -90,7 +90,7 @@ cv::Scalar mean, stddev; // 0:1st channel, 1:2nd channel and 2:3rd channel
 cv::meanStdDev(lap, mean, stddev);
 lvariance = stddev.val[0] * stddev.val[0];
 
-printf("lapVAR: %f\n", lvariance);
+// printf("lapVAR: %f\n", lvariance);
 
 // Red edges
 if (peaking) {
