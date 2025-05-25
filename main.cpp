@@ -400,6 +400,7 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
 {
 bool run=true;
 bool embeddings=false;
+bool store=false;
 bool peaking=true;
 Mat frame;
 VideoCapture cap;
@@ -420,6 +421,7 @@ if (!cap.isOpened()) {
 }
 
 TickMeter tm;
+int label=0;
 
 while (cap.read(frame) && run) {
 	cv::Mat vec;
@@ -444,8 +446,8 @@ while (cap.read(frame) && run) {
 		if (embeddings) {
 			vec=of.detect(theFace);
 		}
-		if (conn && embeddings) {
-			dump_face(vec, 1);
+		if (conn && embeddings && store) {
+			dump_face(vec, label);
 		}
 		//cv::Mat s2, ssm;
 		//ssm=ss.detect(scaled);
@@ -461,25 +463,31 @@ while (cap.read(frame) && run) {
 
 	tm.stop();
 
-	printf("FPS: %f, Faces: (%d) %d\n", tm.getFPS(), f, face.faceCount);
+	// printf("FPS: %f, Faces: (%d) %d\n", tm.getFPS(), f, face.faceCount);
 
-	int key = waitKey(20);
+	int key = waitKey(120);
 	switch (key) {
 	case 'q':
 		run=false;
 	break;
 	case 's':
-		if (f>0)
-			of.store(vec);
+		if (f>0 && embeddings) {
+			printf("Adding face with label: %d\n", label);
+			of.store(vec, label);
+		}
+	break;
+	case 'w':
+		store=!store;
+		printf("Embeddings store to database enabled: %d\n", store);
 	break;
 	case 'e':
 		embeddings=!embeddings;
+		printf("Embeddings enabled: %d\n", embeddings);
 	break;
 	case 'p':
 		peaking=!peaking;
 	break;
-	case 't':
-		embeddings=false;
+	case 'z':
 		of.train();
 	break;
 	case 'c':
@@ -491,17 +499,17 @@ while (cap.read(frame) && run) {
 			cout << avgc << pavg << endl;
 		}
 	break;
-	case 'w':
-		if (f>0)
+	case 't':
+		if (f>0 && pavg.rows>0)
 			of.predict(pavg);
 	break;
 	case 'r':
-		if (f>0)
+		if (f>0 && vec.rows>0)
 			of.predict(vec);
 	break;
 	case 'a':
-		of.label++;
-		printf("CL: %d\n", of.label);
+		label++;
+		printf("Label ID is now: %d\n", label);
 	break;
 	}
 }

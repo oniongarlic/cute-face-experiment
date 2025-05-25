@@ -12,10 +12,9 @@ class OpenFace
 public:
 	OpenFace(std::string modelpath);
 	cv::Mat detect(cv::Mat &frame);
-	void store(cv::Mat vec);
+	void store(const cv::Mat &vec, int label);
 	void train();
 	void predict(cv::Mat &query);
-	int label=1;
 
 private:
 	cv::dnn::Net net;

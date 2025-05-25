@@ -28,14 +28,17 @@ this->net.forward(outs);
 return outs[0];
 }
 
-void OpenFace::store(cv::Mat vec)
+void OpenFace::store(const cv::Mat &vec, int label)
 {
-cv::Mat l=cv::Mat(1, 1, CV_32SC1, label);
+if (vec.rows!=1) {
+	printf("*** Invalid data for svm *** (%d rows %d columns)\n", vec.rows, vec.cols);
+	return;
+}
 
 // store it
 trainingData.push_back(vec);
-labels.push_back(l);
-printf("Data[%d]: %d\n", label, labels.rows);
+labels.push_back(label);
+printf("Data[L: %d]: %d %d\n", label, labels.rows, trainingData.rows);
 }
 
 void OpenFace::train()
