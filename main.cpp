@@ -477,12 +477,13 @@ return r;
 
 void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int camera, string file="")
 {
-    bool run=true;
-    bool embeddings=false;
-    bool peaking=true;
-    Mat frame;
-    VideoCapture cap;
-    FocusCheck focus;
+bool run=true;
+bool embeddings=false;
+bool store=false;
+bool peaking=true;
+Mat frame;
+VideoCapture cap;
+FocusCheck focus;
 
     if (camera>-1) {
         cap.open(camera, CAP_V4L2);
@@ -502,6 +503,7 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
     int frames=0;
     int f;
     bool haveface=false;
+    int label=0;
 
     while (cap.read(frame) && run) {
         cv::Mat vec;
@@ -530,8 +532,8 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
                 focus.isFocused(theFace, peaking);
                 if (embeddings) {
                     vec=of.detect(theFace);
-                    if (conn && embeddings) {
-                        dump_face(vec, 1);
+                    if (conn && embeddings && store) {
+			            dump_face(vec, label);
                     }
                 }
 
@@ -566,51 +568,57 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
 
         tm.stop();
 
-        // printf("FPS: %f, Faces: (%d) %d\n", tm.getFPS(), f, face.faceCount);
+	// printf("FPS: %f, Faces: (%d) %d\n", tm.getFPS(), f, face.faceCount);
 
-        int key = waitKey(20);
-        switch (key) {
-        case 'q':
-            run=false;
-            break;
-        case 's':
-            if (f>0)
-                of.store(vec);
-            break;
-        case 'e':
-            embeddings=!embeddings;
-            break;
-        case 'p':
-            peaking=!peaking;
-            break;
-        case 't':
-            embeddings=false;
-            of.train();
-            break;
-        case 'c':
-            p+=vec;
-            avgc++;
-            if (avgc>5) {
-                printf("Average: %d\n", avgc);
-                p.convertTo(pavg, CV_32F, avgc);
-                cout << avgc << pavg << endl;
-            }
-            break;
-        case 'w':
-            if (f>0)
-                of.predict(pavg);
-            break;
-        case 'r':
-            if (f>0)
-                of.predict(vec);
-            break;
-        case 'a':
-            of.label++;
-            printf("CL: %d\n", of.label);
-            break;
-        }
-    }
-    cap.release();
+	int key = waitKey(120);
+	switch (key) {
+	case 'q':
+		run=false;
+	break;
+	case 's':
+		if (f>0 && embeddings) {
+			printf("Adding face with label: %d\n", label);
+			of.store(vec, label);
+		}
+	break;
+	case 'w':
+		store=!store;
+		printf("Embeddings store to database enabled: %d\n", store);
+	break;
+	case 'e':
+		embeddings=!embeddings;
+		printf("Embeddings enabled: %d\n", embeddings);
+	break;
+	case 'p':
+		peaking=!peaking;
+	break;
+	case 'z':
+		of.train();
+	break;
+	case 'c':
+		p+=vec;
+		avgc++;
+		if (avgc>5) {
+			printf("Average: %d\n", avgc);
+			p.convertTo(pavg, CV_32F, avgc);
+			cout << avgc << pavg << endl;
+		}
+	break;
+	case 't':
+		if (f>0 && pavg.rows>0)
+			of.predict(pavg);
+	break;
+	case 'r':
+		if (f>0 && vec.rows>0)
+			of.predict(vec);
+	break;
+	case 'a':
+		label++;
+		printf("Label ID is now: %d\n", label);
+	break;
+	}
+}
+cap.release();
 }
 
 
