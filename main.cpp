@@ -71,7 +71,7 @@ public:
 
     cv::Rect getFace(int idx) { return boxes[faces[idx]]; }
     cv::Mat getFaceMat(int idx, const cv::Mat &frame);
-    float getFaceConfidence(int idx) { return confidences[faces[idx]]; }
+    float getFaceConfidence(int idx) { return confidences[idx]; }
     vector<cv::Point> getFaceLandmarks(int idx) { return landmarks[faces[idx]]; };
     cv::Point2f getNosePosition(int faceIndex);
 
@@ -442,14 +442,14 @@ void dump_face(Mat vec, int faceid)
     }
 }
 
-int mqtt_publish_info_topic_point(struct mosquitto *mqtt, const char *prefix, const char *topic, cv::Point2f p, float area)
+int mqtt_publish_info_topic_point(struct mosquitto *mqtt, const char *prefix, const char *topic, cv::Point2f p, float area, float conf)
 {
 int r;
 char ftopic[80];
 char data[256];
 
 snprintf(ftopic, sizeof(ftopic), "%s/%s", prefix, topic);
-snprintf(data, sizeof(data), "{\"face\": [%f,%f,%f]}", p.x, p.y, area);
+snprintf(data, sizeof(data), "{\"face\": [%f,%f,%f,%f]}", p.x, p.y, area, conf);
 
 r=mosquitto_publish(mqtt, NULL, ftopic, strlen(data), data, 0, false);
 if (r!=MOSQ_ERR_SUCCESS)
@@ -501,6 +501,7 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
     TickMeter tm;
     int frames=0;
     int f;
+    bool haveface=false;
 
     while (cap.read(frame) && run) {
         cv::Mat vec;
@@ -529,25 +530,31 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
                 focus.isFocused(theFace, peaking);
                 if (embeddings) {
                     vec=of.detect(theFace);
+                    if (conn && embeddings) {
+                        dump_face(vec, 1);
+                    }
                 }
-                if (conn && embeddings) {
-                    dump_face(vec, 1);
-                }
+
                 //cv::Mat s2, ssm;
                 //ssm=ss.detect(scaled);
                 // imshow(kWinMask, ssm);
 
-                auto n=face.getNosePosition(i);
-                mqtt_publish_info_topic_point(mqtt, mqtt_topic_prefix, "face", n, face.faceArea);
+		haveface=true;
 
-                printf("Face size: %f (%f, %f)\n", face.faceArea, n.x, n.y);
+                auto n=face.getNosePosition(i);
+		float conf=face.getFaceConfidence(i);
+
+                mqtt_publish_info_topic_point(mqtt, mqtt_topic_prefix, "face", n, face.faceArea, conf);
+
+                printf("Face size: %f (%f, %f) (%f)\n", face.faceArea, n.x, n.y, conf);
 
                 face.drawPred(scaled, i);
 
-            } else {
+            } else if (f==0 && haveface==true) {
                 int r;
 		const char *ja="{}";
                 r=mosquitto_publish(mqtt, NULL, "video/0/facedetect/face", strlen(ja), ja, 0, false);
+		haveface=false;
             }
 
             if (f==0 && peaking) {
@@ -559,7 +566,7 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
 
         tm.stop();
 
-        printf("FPS: %f, Faces: (%d) %d\n", tm.getFPS(), f, face.faceCount);
+        // printf("FPS: %f, Faces: (%d) %d\n", tm.getFPS(), f, face.faceCount);
 
         int key = waitKey(20);
         switch (key) {
@@ -622,7 +629,7 @@ int connect_db(char *cinfo)
 
 void mqtt_log_callback(struct mosquitto *m, void *userdata, int level, const char *str)
 {
-fprintf(stderr, "[MQTT-%d] %s\n", level, str);
+// fprintf(stderr, "[MQTT-%d] %s\n", level, str);
 }
 
 int connect_mqtt(void)
