@@ -111,46 +111,46 @@ void dump_face(Mat vec, int faceid)
 
 int mqtt_publish_info_topic_point(struct mosquitto *mqtt, const char *prefix, const char *topic, cv::Point2f p, float area, float conf)
 {
-int r;
-char ftopic[80];
-char data[256];
+    int r;
+    char ftopic[80];
+    char data[256];
 
-snprintf(ftopic, sizeof(ftopic), "%s/%s", prefix, topic);
-snprintf(data, sizeof(data), "{\"face\": [%f,%f,%f,%f]}", p.x, p.y, area, conf);
+    snprintf(ftopic, sizeof(ftopic), "%s/%s", prefix, topic);
+    snprintf(data, sizeof(data), "{\"face\": [%f,%f,%f,%f]}", p.x, p.y, area, conf);
 
-r=mosquitto_publish(mqtt, NULL, ftopic, strlen(data), data, 0, false);
-if (r!=MOSQ_ERR_SUCCESS)
-	fprintf(stderr, "MQTT Publish for info [%s] failed with %s\n", topic, mosquitto_strerror(r));
+    r=mosquitto_publish(mqtt, NULL, ftopic, strlen(data), data, 0, false);
+    if (r!=MOSQ_ERR_SUCCESS)
+        fprintf(stderr, "MQTT Publish for info [%s] failed with %s\n", topic, mosquitto_strerror(r));
 
-return r;
+    return r;
 }
 
 int mqtt_publish_info_topic_int(struct mosquitto *mqtt, const char *prefix, const char *topic, int value)
 {
-int r;
-char ftopic[80];
-char data[256];
+    int r;
+    char ftopic[80];
+    char data[256];
 
-snprintf(ftopic, sizeof(ftopic), "%s/%s", prefix, topic);
-snprintf(data, sizeof(data), "%d", value);
+    snprintf(ftopic, sizeof(ftopic), "%s/%s", prefix, topic);
+    snprintf(data, sizeof(data), "%d", value);
 
-r=mosquitto_publish(mqtt, NULL, ftopic, strlen(data), data, 0, false);
-if (r!=MOSQ_ERR_SUCCESS)
-	fprintf(stderr, "MQTT Publish for info [%s] failed with %s\n", topic, mosquitto_strerror(r));
+    r=mosquitto_publish(mqtt, NULL, ftopic, strlen(data), data, 0, false);
+    if (r!=MOSQ_ERR_SUCCESS)
+        fprintf(stderr, "MQTT Publish for info [%s] failed with %s\n", topic, mosquitto_strerror(r));
 
-return r;
+    return r;
 }
 
 
 void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int camera, string file="")
 {
-bool run=true;
-bool embeddings=false;
-bool store=false;
-bool peaking=true;
-Mat frame;
-VideoCapture cap;
-FocusCheck focus;
+    bool run=true;
+    bool embeddings=false;
+    bool store=false;
+    bool peaking=true;
+    Mat frame;
+    VideoCapture cap;
+    FocusCheck focus;
 
     if (camera>-1) {
         cap.open(camera, CAP_V4L2);
@@ -200,7 +200,7 @@ FocusCheck focus;
                 if (embeddings) {
                     vec=of.detect(theFace);
                     if (conn && embeddings && store) {
-			            dump_face(vec, label);
+                        dump_face(vec, label);
                     }
                 }
 
@@ -208,10 +208,10 @@ FocusCheck focus;
                 //ssm=ss.detect(scaled);
                 // imshow(kWinMask, ssm);
 
-		haveface=true;
+                haveface=true;
 
                 auto n=face.getNosePosition(i);
-		float conf=face.getFaceConfidence(i);
+                float conf=face.getFaceConfidence(i);
 
                 mqtt_publish_info_topic_point(mqtt, mqtt_topic_prefix, "face", n, face.faceArea, conf);
 
@@ -221,9 +221,9 @@ FocusCheck focus;
 
             } else if (f==0 && haveface==true) {
                 int r;
-		const char *ja="{}";
+                const char *ja="{}";
                 r=mosquitto_publish(mqtt, NULL, "video/0/facedetect/face", strlen(ja), ja, 0, false);
-		haveface=false;
+                haveface=false;
             }
 
             if (f==0 && peaking) {
@@ -235,57 +235,57 @@ FocusCheck focus;
 
         tm.stop();
 
-	// printf("FPS: %f, Faces: (%d) %d\n", tm.getFPS(), f, face.faceCount);
+        // printf("FPS: %f, Faces: (%d) %d\n", tm.getFPS(), f, face.faceCount);
 
-	int key = waitKey(120);
-	switch (key) {
-	case 'q':
-		run=false;
-	break;
-	case 's':
-		if (f>0 && embeddings) {
-			printf("Adding face with label: %d\n", label);
-			of.store(vec, label);
-		}
-	break;
-	case 'w':
-		store=!store;
-		printf("Embeddings store to database enabled: %d\n", store);
-	break;
-	case 'e':
-		embeddings=!embeddings;
-		printf("Embeddings enabled: %d\n", embeddings);
-	break;
-	case 'p':
-		peaking=!peaking;
-	break;
-	case 'z':
-		of.train();
-	break;
-	case 'c':
-		p+=vec;
-		avgc++;
-		if (avgc>5) {
-			printf("Average: %d\n", avgc);
-			p.convertTo(pavg, CV_32F, avgc);
-			cout << avgc << pavg << endl;
-		}
-	break;
-	case 't':
-		if (f>0 && pavg.rows>0)
-			of.predict(pavg);
-	break;
-	case 'r':
-		if (f>0 && vec.rows>0)
-			of.predict(vec);
-	break;
-	case 'a':
-		label++;
-		printf("Label ID is now: %d\n", label);
-	break;
-	}
-}
-cap.release();
+        int key = waitKey(1);
+        switch (key) {
+        case 'q':
+            run=false;
+            break;
+        case 's':
+            if (f>0 && embeddings) {
+                printf("Adding face with label: %d\n", label);
+                of.store(vec, label);
+            }
+            break;
+        case 'w':
+            store=!store;
+            printf("Embeddings store to database enabled: %d\n", store);
+            break;
+        case 'e':
+            embeddings=!embeddings;
+            printf("Embeddings enabled: %d\n", embeddings);
+            break;
+        case 'p':
+            peaking=!peaking;
+            break;
+        case 'z':
+            of.train();
+            break;
+        case 'c':
+            p+=vec;
+            avgc++;
+            if (avgc>5) {
+                printf("Average: %d\n", avgc);
+                p.convertTo(pavg, CV_32F, avgc);
+                cout << avgc << pavg << endl;
+            }
+            break;
+        case 't':
+            if (f>0 && pavg.rows>0)
+                of.predict(pavg);
+            break;
+        case 'r':
+            if (f>0 && vec.rows>0)
+                of.predict(vec);
+            break;
+        case 'a':
+            label++;
+            printf("Label ID is now: %d\n", label);
+            break;
+        }
+    }
+    cap.release();
 }
 
 
@@ -304,25 +304,25 @@ int connect_db(char *cinfo)
 
 void mqtt_log_callback(struct mosquitto *m, void *userdata, int level, const char *str)
 {
-// fprintf(stderr, "[MQTT-%d] %s\n", level, str);
+    // fprintf(stderr, "[MQTT-%d] %s\n", level, str);
 }
 
 int connect_mqtt(void)
 {
-int port = 1883;
-int keepalive = 120;
-bool clean_session = true;
+    int port = 1883;
+    int keepalive = 120;
+    bool clean_session = true;
 
-mqtt=mosquitto_new(mqtt_clientid, clean_session, NULL);
-mosquitto_log_callback_set(mqtt, mqtt_log_callback);
+    mqtt=mosquitto_new(mqtt_clientid, clean_session, NULL);
+    mosquitto_log_callback_set(mqtt, mqtt_log_callback);
 
-printf("Connecting to MQTT...\n");
+    printf("Connecting to MQTT...\n");
 
-if (mosquitto_connect(mqtt, mqtt_host, port, keepalive)) {
-	fprintf(stderr, "Unable to connect.\n");
-	return -1;
-}
-return 0;
+    if (mosquitto_connect(mqtt, mqtt_host, port, keepalive)) {
+        fprintf(stderr, "Unable to connect.\n");
+        return -1;
+    }
+    return 0;
 }
 
 int main(int argc, char **argv)
@@ -357,8 +357,8 @@ int main(int argc, char **argv)
     printf("Camera: %d, skip: %d\n", camera_id, skip_frame);
     connect_db(dbopts);
 
-mosquitto_lib_init();
-connect_mqtt();
+    mosquitto_lib_init();
+    connect_mqtt();
 
 
     namedWindow(kWinName, WINDOW_NORMAL);
@@ -378,8 +378,8 @@ connect_mqtt();
     if (conn)
         PQfinish(conn);
 
-mosquitto_destroy(mqtt);
-mosquitto_lib_cleanup();
+    mosquitto_destroy(mqtt);
+    mosquitto_lib_cleanup();
 
     return 0;
 }
