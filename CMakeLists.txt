@@ -20,10 +20,11 @@ endforeach()
 # Add executable source files
 add_executable(cuteface
     main.cpp
-    openface.cpp
-    moving_average.cpp
-    selfiesegment.cpp
-    focus_check.cpp
+    openface.cpp openface.hpp
+    moving_average.cpp moving_average.hpp
+    selfiesegment.cpp selfiesegment.hpp
+    focus_check.cpp focus_check.hpp
+    yolov8_face.cpp yolov8_face.h
 )
 
 # Include directories from pkg-config
