@@ -183,7 +183,9 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
         double scale = 1024.0f/frame.size().width;
         resize(frame, scaled, Size(), scale, scale, INTER_AREA);
 
-        scaled.convertTo(scaled, -1, (float)imageContrast/33.0, imageBrightness);
+        if (imageContrast!=33 || imageBrightness!=0) {
+            scaled.convertTo(scaled, -1, (float)imageContrast/33.0, imageBrightness);
+        }
 
         if (skip_frame==1 && (frames & 1)) {
             continue;
