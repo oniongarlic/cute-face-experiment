@@ -245,6 +245,15 @@ void YOLOv8_face::softmax_(const float *x, float *y, int length)
     }
 }
 
+cv::Rect YOLOv8_face::getROI(int faceIndex)
+{
+    float conf=confidences[faceIndex];
+    std::vector<cv::Point> landmark=landmarks[faceIndex];
+    cv::Rect roi=boxes[faceIndex];
+
+    return roi;
+}
+
 void YOLOv8_face::drawPred(cv::Mat &frame, int faceIndex)
 {
     float conf=confidences[faceIndex];
@@ -254,7 +263,7 @@ void YOLOv8_face::drawPred(cv::Mat &frame, int faceIndex)
     // Rectangle of bounding box
     roi=roi & cv::Rect(0, 0, frame.size().width, frame.size().height);
 
-    cv::Mat iroi = frame(roi);
+    // cv::Mat iroi = frame(roi);
 
     theFace = frame(roi);
 

@@ -29,7 +29,8 @@ public:
     float getFaceConfidence(int idx) { return confidences[idx]; }
     std::vector<cv::Point> getFaceLandmarks(int idx) { return landmarks[faces[idx]]; };
     cv::Point2f getNosePosition(int faceIndex);
-    
+    cv::Rect getROI(int faceIndex);
+
 private:
     cv::Mat resize_image(const cv::Mat srcimg, int *newh, int *neww, int *padh, int *padw);
     
