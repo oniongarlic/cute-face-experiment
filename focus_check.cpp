@@ -80,8 +80,8 @@ variance = estddev.val[0] * estddev.val[0];
 
 inFocus=(variance<focusThreshold) ? true : false;
 
-cv::imshow("dftRaw", mag);
-cv::imshow("dftShift", mags);
+//cv::imshow("dftRaw", mag);
+//cv::imshow("dftShift", mags);
 
 cv::equalizeHist(iroig, iroig);
 cv::Laplacian(iroig, lap, CV_32F, 3);
