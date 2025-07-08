@@ -4,6 +4,7 @@
 
 #include <opencv2/opencv.hpp>
 #include <opencv2/dnn.hpp>
+#include <opencv2/tracking.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/highgui.hpp>
 #include <opencv2/ml.hpp>
@@ -41,6 +42,9 @@ cv::Mat p;
 cv::Mat pavg;
 
 PGconn *conn;
+
+Ptr<cv::Tracker> tracker;
+bool trackFace=false;
 
 int skip_frame=0;
 
@@ -168,9 +172,12 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
 
     TickMeter tm;
     int frames=0;
-    int f;
+    int f=0;
     bool haveface=false;
+    bool tracking=false;
     int label=0;
+
+    const cv::Scalar purple	(128.0, 0.0, 128.0);
 
     while (cap.read(frame) && run) {
         cv::Mat vec;
@@ -189,21 +196,32 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
 
         if (skip_frame==1 && (frames & 1)) {
             continue;
-        } else {
+        } else if (!tracking) {
 
             f=face.detect(scaled);
 
             if (f>0) {
                 int i=face.getLargestFace();
                 cv::Mat theFace=face.getFaceMat(i, scaled);
-                focus.simulatedFocus=simulatedFocus;
 
+                focus.simulatedFocus=simulatedFocus;
                 focus.isFocused(theFace, peaking);
+
                 if (embeddings) {
                     vec=of.detect(theFace);
                     if (conn && embeddings && store) {
                         dump_face(vec, label);
                     }
+                }
+
+                if (trackFace && tracking==false) {
+                    auto faceRoi=face.getROI(i);
+                    tracker = cv:: TrackerKCF::create();
+                    tracker->init(scaled, faceRoi);
+                    tracking=true;
+                    trackFace=false;
+                    printf("Using tracker to track face \n");
+                    tm.reset();
                 }
 
                 //cv::Mat s2, ssm;
@@ -226,10 +244,24 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
                 const char *ja="{}";
                 r=mosquitto_publish(mqtt, NULL, "video/0/facedetect/face", strlen(ja), ja, 0, false);
                 haveface=false;
+            } else if (f==0 && peaking) {
+                focus_peaking(scaled, focus.inFocus);
             }
 
-            if (f==0 && peaking) {
-                focus_peaking(scaled, focus.inFocus);
+        }
+
+        if (tracking) {
+            cv::Rect2i troi;
+
+            printf("Tracking update: ");
+
+            const bool ok=tracker->update(scaled, troi);
+            if (ok) {
+                printf("OK\n");
+                cv::rectangle(scaled, troi, purple);
+            } else {
+                printf("LOST\n");
+                tracking=false;
             }
         }
 
@@ -237,9 +269,9 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
 
         tm.stop();
 
-        // printf("FPS: %f, Faces: (%d) %d\n", tm.getFPS(), f, face.faceCount);
+        printf("FPS: %f, Faces: (%d) %d\n", tm.getFPS(), f, face.faceCount);
 
-        int key = waitKey(1);
+        int key = waitKey(10);
         switch (key) {
         case 'q':
             run=false;
@@ -284,6 +316,10 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
         case 'a':
             label++;
             printf("Label ID is now: %d\n", label);
+            break;
+        case 'm':
+            trackFace=true;
+            printf("Using tracker\n");
             break;
         }
     }
@@ -364,7 +400,7 @@ int main(int argc, char **argv)
 
 
     namedWindow(kWinName, WINDOW_NORMAL);
-    namedWindow(kWinRoi, WINDOW_NORMAL);
+    //namedWindow(kWinRoi, WINDOW_NORMAL);
     //namedWindow(kWinMask, WINDOW_NORMAL);
 
     createTrackbar("Focus:", kWinName, &simulatedFocus, 400);
