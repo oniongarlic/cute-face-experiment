@@ -30,21 +30,21 @@ add_executable(cuteface
 
 # Include directories from pkg-config
 target_include_directories(cuteface PRIVATE
-    ${opencv4_INCLUDE_DIRS}
+    ${OpenCV_INCLUDE_DIRS}
     ${libpq_INCLUDE_DIRS}
     ${libmosquitto_INCLUDE_DIRS}
 )
 
 # Link libraries from pkg-config
 target_link_libraries(cuteface PRIVATE
-    ${opencv4_LIBRARIES}
+    ${OpenCV_LIBS}
     ${libpq_LIBRARIES}
     ${libmosquitto_LIBRARIES}
 )
 
 # Add other necessary flags
 target_compile_options(cuteface PRIVATE
-    ${opencv4_CFLAGS_OTHER}
+    ${OpenCV_CFLAGS_OTHER}
     ${libpq_CFLAGS_OTHER}
     ${libmosquitto_CFLAGS_OTHER}
 )
