@@ -7,9 +7,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Find the packages via pkg-config
 find_package(PkgConfig REQUIRED)
+find_package(OpenCV REQUIRED)
 
 # List of required packages
-set(PKG_DEPENDENCIES opencv4 libpq libmosquitto)
+set(PKG_DEPENDENCIES libpq libmosquitto)
 
 # Query pkg-config for the required packages
 foreach(PKG ${PKG_DEPENDENCIES})
