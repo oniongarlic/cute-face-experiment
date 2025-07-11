@@ -159,8 +159,13 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
     if (camera>-1) {
         cap.open(camera, CAP_V4L2);
         cap.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'));
-        cap.set(cv::CAP_PROP_FRAME_HEIGHT, 1080);
+#ifdef FHD
         cap.set(cv::CAP_PROP_FRAME_WIDTH, 1920);
+        cap.set(cv::CAP_PROP_FRAME_HEIGHT, 1080);
+#else
+        cap.set(cv::CAP_PROP_FRAME_WIDTH, 1280);
+        cap.set(cv::CAP_PROP_FRAME_HEIGHT, 720);
+#endif
     } else {
         cap.open(file);
     }
@@ -171,7 +176,7 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
     }
 
     TickMeter tm;
-    int frames=0;
+    int frames=0,tracked=0;
     int f=0;
     bool haveface=false;
     bool tracking=false;
@@ -187,7 +192,8 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
 
         tm.start();
 
-        double scale = 1024.0f/frame.size().width;
+        // double scale = 1024.0f/frame.size().width;
+	double scale=0.5;
         resize(frame, scaled, Size(), scale, scale, INTER_AREA);
 
         if (imageContrast!=33 || imageBrightness!=0) {
@@ -196,9 +202,16 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
 
         if (skip_frame==1 && (frames & 1)) {
             continue;
-        } else if (!tracking) {
+        } else if (!tracking || tracked>20) {
 
             f=face.detect(scaled);
+
+	    // Re-aquire face roi for tracker
+	    if (tracking && tracked>20) {
+	      tracked=0;
+              trackFace=true;
+              tracking=false;
+            }
 
             if (f>0) {
                 int i=face.getLargestFace();
@@ -208,6 +221,7 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
                 focus.isFocused(theFace, peaking);
 
                 if (embeddings) {
+                    printf("Getting face embeddings\n");
                     vec=of.detect(theFace);
                     if (conn && embeddings && store) {
                         dump_face(vec, label);
@@ -215,12 +229,19 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
                 }
 
                 if (trackFace && tracking==false) {
+		    cv::Mat trackFaceRoi;
+
                     auto faceRoi=face.getROI(i);
-                    tracker = cv:: TrackerKCF::create();
+                    //tracker = cv:: TrackerKCF::create();
+                    tracker = cv:: TrackerCSRT::create();
                     tracker->init(scaled, faceRoi);
                     tracking=true;
                     trackFace=false;
                     printf("Using tracker to track face \n");
+
+                    trackFaceRoi=scaled(faceRoi);
+                    imshow("TRACK", trackFaceRoi);
+
                     tm.reset();
                 }
 
@@ -259,9 +280,11 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
             if (ok) {
                 printf("OK\n");
                 cv::rectangle(scaled, troi, purple);
+		tracked++;
             } else {
                 printf("LOST\n");
                 tracking=false;
+		tracked=false;
             }
         }
 
