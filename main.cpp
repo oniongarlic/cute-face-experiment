@@ -112,13 +112,23 @@ void dump_face(Mat vec, int faceid)
 
 void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int camera, string file="")
 {
+    cv::Mat frame;
+    cv::TickMeter tm;
+
+    VideoCapture cap;
+    FocusCheck focus;
+
     bool run=true;
     bool embeddings=false;
     bool store=false;
-    bool peaking=true;
-    Mat frame;
-    VideoCapture cap;
-    FocusCheck focus;
+    bool peaking=true;    
+    bool haveface=false;
+    bool tracking=false;
+
+    int frames=0,tracked=0,f=0;
+    int label=0;
+
+    const cv::Scalar purple	(128.0, 0.0, 128.0);
 
     if (camera>-1) {
         cap.open(camera, CAP_V4L2);
@@ -139,15 +149,6 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
         return;
     }
 
-    TickMeter tm;
-    int frames=0,tracked=0;
-    int f=0;
-    bool haveface=false;
-    bool tracking=false;
-    int label=0;
-
-    const cv::Scalar purple	(128.0, 0.0, 128.0);
-
     while (cap.read(frame) && run) {
         cv::Mat vec;
         cv::Mat scaled;
@@ -164,9 +165,10 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
             scaled.convertTo(scaled, -1, (float)imageContrast/33.0, imageBrightness);
         }
 
-        if (skip_frame==1 && (frames & 1)) {
+        if (skip_frame==1 && (frames & 1))
             continue;
-        } else if (!tracking || tracked>20) {
+
+        if (!tracking || tracked>20) {
 
             f=face.detect(scaled);
 
