@@ -13,7 +13,7 @@
 
 #include <libpq-fe.h>
 
-#include <mosquitto.h>
+#include "mqtt.h"
 
 #include "openface.hpp"
 #include "selfiesegment.hpp"
@@ -28,11 +28,6 @@ static const string kWinName = "Face detection use OpenCV";
 static const string kWinRoi = "ROI";
 static const string kWinMask = "Mask";
 
-static struct mosquitto *mqtt=NULL;
-const char *mqtt_host="localhost";
-const char *mqtt_clientid="face-detecor";
-const char *mqtt_topic_prefix="video/0/facedetect";
-
 int simulatedFocus=0;
 int imageBrightness=0;
 int imageContrast=33;
@@ -42,6 +37,8 @@ cv::Mat p;
 cv::Mat pavg;
 
 PGconn *conn;
+
+mqtt mqtt;
 
 Ptr<cv::Tracker> tracker;
 bool trackFace=false;
@@ -112,39 +109,6 @@ void dump_face(Mat vec, int faceid)
         // exit(2);
     }
 }
-
-int mqtt_publish_info_topic_point(struct mosquitto *mqtt, const char *prefix, const char *topic, cv::Point2f p, float area, float conf)
-{
-    int r;
-    char ftopic[80];
-    char data[256];
-
-    snprintf(ftopic, sizeof(ftopic), "%s/%s", prefix, topic);
-    snprintf(data, sizeof(data), "{\"face\": [%f,%f,%f,%f]}", p.x, p.y, area, conf);
-
-    r=mosquitto_publish(mqtt, NULL, ftopic, strlen(data), data, 0, false);
-    if (r!=MOSQ_ERR_SUCCESS)
-        fprintf(stderr, "MQTT Publish for info [%s] failed with %s\n", topic, mosquitto_strerror(r));
-
-    return r;
-}
-
-int mqtt_publish_info_topic_int(struct mosquitto *mqtt, const char *prefix, const char *topic, int value)
-{
-    int r;
-    char ftopic[80];
-    char data[256];
-
-    snprintf(ftopic, sizeof(ftopic), "%s/%s", prefix, topic);
-    snprintf(data, sizeof(data), "%d", value);
-
-    r=mosquitto_publish(mqtt, NULL, ftopic, strlen(data), data, 0, false);
-    if (r!=MOSQ_ERR_SUCCESS)
-        fprintf(stderr, "MQTT Publish for info [%s] failed with %s\n", topic, mosquitto_strerror(r));
-
-    return r;
-}
-
 
 void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int camera, string file="")
 {
@@ -363,29 +327,6 @@ int connect_db(char *cinfo)
     return 0;
 }
 
-void mqtt_log_callback(struct mosquitto *m, void *userdata, int level, const char *str)
-{
-    // fprintf(stderr, "[MQTT-%d] %s\n", level, str);
-}
-
-int connect_mqtt(void)
-{
-    int port = 1883;
-    int keepalive = 120;
-    bool clean_session = true;
-
-    mqtt=mosquitto_new(mqtt_clientid, clean_session, NULL);
-    mosquitto_log_callback_set(mqtt, mqtt_log_callback);
-
-    printf("Connecting to MQTT...\n");
-
-    if (mosquitto_connect(mqtt, mqtt_host, port, keepalive)) {
-        fprintf(stderr, "Unable to connect.\n");
-        return -1;
-    }
-    return 0;
-}
-
 int main(int argc, char **argv)
 {
     int opt,camera_id=0;
@@ -418,9 +359,7 @@ int main(int argc, char **argv)
     printf("Camera: %d, skip: %d\n", camera_id, skip_frame);
     connect_db(dbopts);
 
-    mosquitto_lib_init();
-    connect_mqtt();
-
+    mqtt.connect();
 
     namedWindow(kWinName, WINDOW_NORMAL);
     //namedWindow(kWinRoi, WINDOW_NORMAL);
@@ -438,9 +377,6 @@ int main(int argc, char **argv)
 
     if (conn)
         PQfinish(conn);
-
-    mosquitto_destroy(mqtt);
-    mosquitto_lib_cleanup();
 
     return 0;
 }

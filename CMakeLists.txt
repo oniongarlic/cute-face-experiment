@@ -26,6 +26,7 @@ add_executable(cuteface
     selfiesegment.cpp selfiesegment.hpp
     focus_check.cpp focus_check.hpp
     yolov8_face.cpp yolov8_face.h
+    mqtt.h mqtt.cpp
 )
 
 # Include directories from pkg-config
