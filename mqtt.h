@@ -6,17 +6,19 @@
 
 class mqtt
 {
-    const char *mqtt_host="localhost";
-    const char *mqtt_clientid="face-detecor";
-    const char *mqtt_topic_prefix="video/0/facedetect";
+    const char *host="localhost";
+    const char *clientid="face-detecor";
+    const char *prefix="video/0/facedetect";
 
 public:
     mqtt();
+    ~mqtt();
+
     int connect();
 
-    int publish_info_topic_point(const char *prefix, const char *topic, cv::Point2f p, float area, float conf);
-    int publish_info_topic_int(const char *prefix, const char *topic, int value);
-    ~mqtt();
+    int publish_point(const char *topic, cv::Point2f p, float area, float conf);
+    int publish_int(const char *topic, int value);
+    int publish_string(const char *topic, const char *data);
 private:
     struct mosquitto *m_mqtt=NULL;
 };

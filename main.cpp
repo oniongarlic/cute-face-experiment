@@ -157,7 +157,7 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
         tm.start();
 
         // double scale = 1024.0f/frame.size().width;
-	double scale=0.5;
+        double scale=0.5;
         resize(frame, scaled, Size(), scale, scale, INTER_AREA);
 
         if (imageContrast!=33 || imageBrightness!=0) {
@@ -170,11 +170,11 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
 
             f=face.detect(scaled);
 
-	    // Re-aquire face roi for tracker
-	    if (tracking && tracked>20) {
-	      tracked=0;
-              trackFace=true;
-              tracking=false;
+            // Re-aquire face roi for tracker
+            if (tracking && tracked>20) {
+                tracked=0;
+                trackFace=true;
+                tracking=false;
             }
 
             if (f>0) {
@@ -193,7 +193,7 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
                 }
 
                 if (trackFace && tracking==false) {
-		    cv::Mat trackFaceRoi;
+                    cv::Mat trackFaceRoi;
 
                     auto faceRoi=face.getROI(i);
                     //tracker = cv:: TrackerKCF::create();
@@ -218,7 +218,7 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
                 auto n=face.getNosePosition(i);
                 float conf=face.getFaceConfidence(i);
 
-                mqtt_publish_info_topic_point(mqtt, mqtt_topic_prefix, "face", n, face.faceArea, conf);
+                mqtt.publish_point("face", n, face.faceArea, conf);
 
                 printf("Face size: %f (%f, %f) (%f)\n", face.faceArea, n.x, n.y, conf);
 
@@ -227,7 +227,7 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
             } else if (f==0 && haveface==true) {
                 int r;
                 const char *ja="{}";
-                r=mosquitto_publish(mqtt, NULL, "video/0/facedetect/face", strlen(ja), ja, 0, false);
+                r=mqtt.publish_string("face", ja);
                 haveface=false;
             } else if (f==0 && peaking) {
                 focus_peaking(scaled, focus.inFocus);
@@ -244,11 +244,11 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
             if (ok) {
                 printf("OK\n");
                 cv::rectangle(scaled, troi, purple);
-		tracked++;
+                tracked++;
             } else {
                 printf("LOST\n");
                 tracking=false;
-		tracked=false;
+                tracked=false;
             }
         }
 
