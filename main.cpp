@@ -126,7 +126,7 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
     bool tracking=false;
 
     int frames=0,tracked=0,f=0;
-    int label=0;
+    int label=0,fps=30;
 
     const cv::Scalar purple	(128.0, 0.0, 128.0);
 
@@ -168,12 +168,12 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
         if (skip_frame==1 && (frames & 1))
             continue;
 
-        if (!tracking || tracked>20) {
+        if (!tracking || tracked>fps) {
 
             f=face.detect(scaled);
 
             // Re-aquire face roi for tracker
-            if (tracking && tracked>20) {
+            if (tracking && tracked>fps) {
                 tracked=0;
                 trackFace=true;
                 tracking=false;
@@ -259,6 +259,8 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
         tm.stop();
 
         printf("FPS: %f, Faces: (%d) %d\n", tm.getFPS(), f, face.faceCount);
+
+        mqtt.loop();
 
         int key = waitKey(10);
         switch (key) {
