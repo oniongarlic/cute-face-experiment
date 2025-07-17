@@ -19,6 +19,7 @@ public:
     int publish_point(const char *topic, cv::Point2f p, float area, float conf);
     int publish_int(const char *topic, int value);
     int publish_string(const char *topic, const char *data);
+    void loop();
 private:
     struct mosquitto *m_mqtt=NULL;
 };

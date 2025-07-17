@@ -37,6 +37,10 @@ int mqtt::connect(void)
     return 0;
 }
 
+void mqtt::loop() {
+    mosquitto_loop(m_mqtt, 1, 1);
+}
+
 int mqtt::publish_string(const char *topic, const char *data)
 {
     int r;
