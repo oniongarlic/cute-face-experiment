@@ -52,8 +52,18 @@ public:
     Point nose;
     Point mouth;
 
+    float confidence;
+
+    MovingAverage ma_h;
+    MovingAverage ma_v;
+
+    cv::Mat face;
+    cv::Mat e;
+
     int area;
 };
+
+Face theFace;
 
 void focus_peaking(cv::Mat &image, bool inFocus)
 {
@@ -181,14 +191,14 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
 
             if (f>0) {
                 int i=face.getLargestFace();
-                cv::Mat theFace=face.getFaceMat(i, scaled);
+                theFace.face=face.getFaceMat(i, scaled);
 
                 focus.simulatedFocus=simulatedFocus;
-                focus.isFocused(theFace, peaking);
+                focus.isFocused(theFace.face, peaking);
 
                 if (embeddings) {
                     printf("Getting face embeddings\n");
-                    vec=of.detect(theFace);
+                    vec=of.detect(theFace.face);
                     if (conn && embeddings && store) {
                         dump_face(vec, label);
                     }
@@ -220,9 +230,15 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
                 auto n=face.getNosePosition(i);
                 float conf=face.getFaceConfidence(i);
 
+                theFace.nose=face.getNosePosition(i);
+                theFace.confidence=face.getFaceConfidence(i);
+
+                theFace.ma_h.add((double)n.x);
+                theFace.ma_v.add((double)n.y);
+
                 mqtt.publish_point("face", n, face.faceArea, conf);
 
-                printf("Face size: %f (%f, %f) (%f)\n", face.faceArea, n.x, n.y, conf);
+                printf("Face size: %f (%f, %f) (%f) (%f,%f)\n", face.faceArea, n.x, n.y, conf, theFace.ma_h.get(), theFace.ma_v.get());
 
                 face.drawPred(scaled, i);
 
