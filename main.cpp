@@ -11,7 +11,7 @@
 
 #include <unistd.h>
 
-#include <libpq-fe.h>
+#include <pqxx/pqxx>
 
 #include "mqtt.h"
 
@@ -36,7 +36,7 @@ int avgc=0;
 cv::Mat p;
 cv::Mat pavg;
 
-PGconn *conn;
+pqxx::connection *cx;
 
 mqtt mqtt;
 
@@ -44,6 +44,92 @@ Ptr<cv::Tracker> tracker;
 bool trackFace=false;
 
 int skip_frame=0;
+
+class Persons
+{
+public:
+void save(cv::Mat vec, int faceid)
+{
+    std::string s;
+    std::string e;
+
+    //e << vec;
+
+    s="INSERT INTO faces (person, embedding) VALUES ("+std::to_string(faceid)+",'"+e+"');";
+
+    pqxx::work t(*cx);
+    t.exec(s);
+    t.commit();
+}
+
+int load_embeddings()
+{
+    std::string s;
+
+    s="SELECT person,AVG(embedding) AS e FROM faces GROUP BY person";
+
+    pqxx::work t(*cx);
+
+    auto res=t.exec(s);
+
+    embeddings.clear();
+    for (const auto &row : res) {
+      std::vector<float> tmp;
+      int id=row["person"].as<int>();
+      std::string e=row["e"].as<std::string>();
+
+      cout << id << " = " << e << endl;
+
+      // remove []
+      std::stringstream se(e.substr(1, e.size()-2));
+
+      // get the numbers x,y,x,,,,
+      std::string t;
+      while (std::getline(se, t, ',')) {
+         cout << t << endl;
+         tmp.push_back(std::stof(t));
+      }
+
+      cv::Mat m(1, 128, CV_32F, tmp.data());
+
+      embeddings[id]=m;
+    }
+
+    t.commit();
+
+    return embeddings.size();
+}
+int load_persons()
+{
+    std::string s;
+
+    s="SELECT person,name FROM persons";
+
+    pqxx::work t(*cx);
+
+    auto res=t.exec(s);
+
+    persons.clear();
+    for (const auto &row : res) {
+      int id=row["person"].as<int>();
+      std::string n=row["name"].as<std::string>();
+
+      cout << id << " = " << n << endl;
+
+      persons[id]=n;
+    }
+
+    t.commit();
+
+    return persons.size();
+}
+
+    pqxx::connection *cx;
+    std::map<int, cv::Mat> embeddings;
+    std::map<int, std::string> persons;
+};
+
+Persons pe;
 
 class Face
 {
@@ -90,26 +176,6 @@ void detect_from_image(YOLOv8_face &face, OpenFace &of, const char *file)
 }
 
 
-void dump_face(Mat vec, int faceid)
-{
-    PGresult *res;
-    std::string s;
-    std::string e;
-
-    e << vec;
-
-    s="INSERT INTO faces (person, embedding) VALUES ("+std::to_string(faceid)+",'"+e+"');";
-
-    // std::cout << e << std::endl;
-
-    res=PQexec(conn, s.c_str());
-    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
-        fprintf(stderr, "Connection to database failed: %s", PQerrorMessage(conn));
-        PQclear(res);
-        // exit(2);
-    }
-}
-
 void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int camera, string file="")
 {
     cv::Mat frame;
@@ -149,6 +215,11 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
         return;
     }
 
+    double capw=cap.get(cv::CAP_PROP_FRAME_WIDTH);
+    double caph=cap.get(cv::CAP_PROP_FRAME_HEIGHT);
+
+    printf("Input resolution is: %f, %f\n", capw, caph);
+
     while (cap.read(frame) && run) {
         cv::Mat vec;
         cv::Mat scaled;
@@ -157,9 +228,13 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
 
         tm.start();
 
-        // double scale = 1024.0f/frame.size().width;
+#if 0 
+       // double scale = 1024.0f/frame.size().width;
         double scale=0.5;
         resize(frame, scaled, Size(), scale, scale, INTER_AREA);
+#else
+	scaled=frame;
+#endif
 
         if (imageContrast!=33 || imageBrightness!=0) {
             scaled.convertTo(scaled, -1, (float)imageContrast/33.0, imageBrightness);
@@ -170,7 +245,7 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
 
         if (!tracking || tracked>fps) {
 
-            f=face.detect(scaled);
+            f=face.detect(scaled); // scaled
 
             // Re-aquire face roi for tracker
             if (tracking && tracked>fps) {
@@ -189,9 +264,10 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
                 if (embeddings) {
                     printf("Getting face embeddings\n");
                     vec=of.detect(theFace);
-                    if (conn && embeddings && store) {
-                        dump_face(vec, label);
+                    if (cx && embeddings && store) {
+                        pe.save(vec, label);
                     }
+		    store=false;
                 }
 
                 if (trackFace && tracking==false) {
@@ -304,9 +380,13 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
             if (f>0 && vec.rows>0)
                 of.predict(vec);
             break;
-        case 'a':
+        case '+':
             label++;
-            printf("Label ID is now: %d\n", label);
+            printf("Person ID: %d\n", label);
+            break;
+        case '-':
+            label--;
+            printf("Person ID: %d\n", label);
             break;
         case 'm':
             trackFace=true;
@@ -320,15 +400,12 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
 
 int connect_db(char *cinfo)
 {
-    conn=PQconnectdb(cinfo ? cinfo : "");
-    if (PQstatus(conn) != CONNECTION_OK) {
-        fprintf(stderr, "Connection to database failed: %s", PQerrorMessage(conn));
-        PQfinish(conn);
-        conn=NULL;
+    try {
+        cx=new pqxx::connection(cinfo);
+    } catch (std::exception &e) {
         return -1;
     }
-
-    return 0;
+    return 1;
 }
 
 int main(int argc, char **argv)
@@ -361,7 +438,11 @@ int main(int argc, char **argv)
 
     printf("DB: %s\n", dbopts);
     printf("Camera: %d, skip: %d\n", camera_id, skip_frame);
+
     connect_db(dbopts);
+    pe.cx=cx;
+    pe.load_persons();
+    pe.load_embeddings();
 
     mqtt.connect();
 
@@ -379,8 +460,10 @@ int main(int argc, char **argv)
 
     destroyAllWindows();
 
-    if (conn)
-        PQfinish(conn);
+    if (cx) {
+      cx->disconnect();
+      delete cx;
+    }
 
     return 0;
 }

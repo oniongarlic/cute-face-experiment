@@ -10,7 +10,7 @@ find_package(PkgConfig REQUIRED)
 find_package(OpenCV REQUIRED)
 
 # List of required packages
-set(PKG_DEPENDENCIES libpq libmosquitto)
+set(PKG_DEPENDENCIES libpqxx libmosquitto)
 
 # Query pkg-config for the required packages
 foreach(PKG ${PKG_DEPENDENCIES})
@@ -32,21 +32,21 @@ add_executable(cuteface
 # Include directories from pkg-config
 target_include_directories(cuteface PRIVATE
     ${OpenCV_INCLUDE_DIRS}
-    ${libpq_INCLUDE_DIRS}
+    ${libpqxx_INCLUDE_DIRS}
     ${libmosquitto_INCLUDE_DIRS}
 )
 
 # Link libraries from pkg-config
 target_link_libraries(cuteface PRIVATE
     ${OpenCV_LIBS}
-    ${libpq_LIBRARIES}
+    ${libpqxx_LIBRARIES}
     ${libmosquitto_LIBRARIES}
 )
 
 # Add other necessary flags
 target_compile_options(cuteface PRIVATE
     ${OpenCV_CFLAGS_OTHER}
-    ${libpq_CFLAGS_OTHER}
+    ${libpqxx_CFLAGS_OTHER}
     ${libmosquitto_CFLAGS_OTHER}
 )
 

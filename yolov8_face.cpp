@@ -15,8 +15,8 @@ YOLOv8_face::YOLOv8_face(string modelpath, float confThreshold, float nmsThresho
     this->nmsThreshold = nmsThreshold;
     this->net = cv::dnn::readNet(modelpath);
 
-    net.setPreferableBackend(cv::dnn::DNN_BACKEND_CUDA);
-    net.setPreferableTarget(cv::dnn::DNN_TARGET_CUDA);
+    //net.setPreferableBackend(cv::dnn::DNN_BACKEND_CUDA);
+    //net.setPreferableTarget(cv::dnn::DNN_TARGET_CUDA);
 }
 
 cv::Mat YOLOv8_face::resize_image(const cv::Mat srcimg, int *newh, int *neww, int *padh, int *padw)
@@ -117,12 +117,13 @@ void YOLOv8_face::generate_proposal(const Mat &out, int imgh, int imgw, float ra
 {
     const int feat_h = out.size[2];
     const int feat_w = out.size[3];
-    //cout << out.size[1] << "," << out.size[2] << "," << out.size[3] << endl;
     const int stride = (int)ceil((float)inpHeight / feat_h);
     const int area = feat_h * feat_w;
     float* ptr = (float*)out.data;
     float* ptr_cls = ptr + area * reg_max * 4;
     float* ptr_kp = ptr + area * (reg_max * 4 + num_class);
+
+//    cout << out.size[1] << "," << out.size[2] << "," << out.size[3] << " : " << area << endl;
 
     for (int i = 0; i < feat_h; i++) {
         for (int j = 0; j < feat_w; j++) {
@@ -201,6 +202,8 @@ int YOLOv8_face::detect(cv::Mat &srcimg)
     float rh = (float)srcimg.rows / newh;
     float rw = (float)srcimg.cols / neww;
 
+    cout << "SRC:" << srcimg.cols << ", " << srcimg.rows << " - " << rw << ", " << rh << endl;
+
     generate_proposal(outs[0], srcimg.rows, srcimg.cols, rh, rw, padh, padw);
     generate_proposal(outs[1], srcimg.rows, srcimg.cols, rh, rw, padh, padw);
     generate_proposal(outs[2], srcimg.rows, srcimg.cols, rh, rw, padh, padw);
@@ -220,11 +223,13 @@ int YOLOv8_face::getLargestFace()
     for (size_t i = 0; i < faces.size(); ++i) {
         int idx = faces[i];
         const cv::Rect box = boxes[idx];
+
         int a=box.width*box.height;
         if (a>area && confidences[idx]>0.60f) {
             area=a;
             largest=idx;
         }
+	printf("BOX: %d %d (%d)\n", box.width, box.height, a);
     }
 
     faceArea=area/inpArea;

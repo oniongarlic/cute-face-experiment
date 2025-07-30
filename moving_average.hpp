@@ -8,6 +8,7 @@ public:
 
 private:
 	double m_value=0;
+    double m_weight=0;
 	int m_v=0;
 	int m_n;
 };

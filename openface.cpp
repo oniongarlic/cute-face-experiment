@@ -4,8 +4,8 @@ OpenFace::OpenFace(std::string modelpath)
 {
 net=cv::dnn::readNetFromTorch(modelpath);
 
-net.setPreferableBackend(cv::dnn::DNN_BACKEND_CUDA);
-net.setPreferableTarget(cv::dnn::DNN_TARGET_CUDA);
+//net.setPreferableBackend(cv::dnn::DNN_BACKEND_OPENCV);
+//net.setPreferableTarget(cv::dnn::DNN_TARGET_OPENCL);
 
 trainingData=cv::Mat(0, 128, CV_32F);
 labels=cv::Mat(0, 1, CV_32SC1);
