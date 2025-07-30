@@ -53,7 +53,7 @@ void save(cv::Mat vec, int faceid)
     std::string s;
     std::string e;
 
-    //e << vec;
+    e << vec;
 
     s="INSERT INTO faces (person, embedding) VALUES ("+std::to_string(faceid)+",'"+e+"');";
 
@@ -92,10 +92,14 @@ int load_embeddings()
 
       cv::Mat m(1, 128, CV_32F, tmp.data());
 
+      of->store(m, id);
+
       embeddings[id]=m;
     }
 
     t.commit();
+
+    of->train();
 
     return embeddings.size();
 }
@@ -124,6 +128,7 @@ int load_persons()
     return persons.size();
 }
 
+    OpenFace *of;
     pqxx::connection *cx;
     std::map<int, cv::Mat> embeddings;
     std::map<int, std::string> persons;
@@ -187,9 +192,10 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
     bool run=true;
     bool embeddings=false;
     bool store=false;
-    bool peaking=true;    
+    bool peaking=true;
     bool haveface=false;
     bool tracking=false;
+    bool predict=false;
 
     int frames=0,tracked=0,f=0;
     int label=0,fps=30;
@@ -266,8 +272,11 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
                     vec=of.detect(theFace);
                     if (cx && embeddings && store) {
                         pe.save(vec, label);
+                        store=false;
                     }
-		    store=false;
+                    if (cx && embeddings && predict) {
+                        of.predict(vec);
+                    }
                 }
 
                 if (trackFace && tracking==false) {
@@ -312,6 +321,9 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
             }
 
         }
+
+        putText(scaled, std::to_string(label), Point(10, 10), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(128, 255, 128), 1);
+        putText(scaled, std::to_string(f), Point(10, 30), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(128, 255, 128), 1);
 
         if (tracking) {
             cv::Rect2i troi;
@@ -377,8 +389,7 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
                 of.predict(pavg);
             break;
         case 'r':
-            if (f>0 && vec.rows>0)
-                of.predict(vec);
+            predict=!predict;
             break;
         case '+':
             label++;
@@ -441,6 +452,7 @@ int main(int argc, char **argv)
 
     connect_db(dbopts);
     pe.cx=cx;
+    pe.of=&of;
     pe.load_persons();
     pe.load_embeddings();
 

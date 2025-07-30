@@ -57,5 +57,5 @@ float r;
 
 r=svm->predict(query, res);
 
-std::cout << r << res << std::endl;
+std::cout << r << ":" << res << std::endl;
 }
