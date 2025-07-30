@@ -9,6 +9,8 @@
 #include <opencv2/highgui.hpp>
 #include <opencv2/ml.hpp>
 
+#include <opencv2/tracking/tracking_by_matching.hpp>
+
 #include <unistd.h>
 
 #include <pqxx/pqxx>
@@ -152,9 +154,13 @@ public:
     cv::Mat e;
 
     int area;
+
+    long frame;
 };
 
 Face theFace;
+
+std::vector<Face> faces;
 
 void focus_peaking(cv::Mat &image, bool inFocus)
 {
@@ -207,8 +213,8 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
     bool tracking=false;
     bool predict=false;
 
-    int frames=0,tracked=0,f=0;
-    int label=0,fps=30;
+    long frames=0;
+    int label=0,fps=30,tracked=0,f=0;
 
     const cv::Scalar purple	(128.0, 0.0, 128.0);
 
@@ -275,11 +281,19 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
                 theFace.face=face.getFaceMat(i, scaled);
 
                 focus.simulatedFocus=simulatedFocus;
-                focus.isFocused(theFace.face, peaking);
+                // focus.isFocused(theFace.face, peaking);
 
                 if (embeddings) {
                     printf("Getting face embeddings\n");
                     vec=of.detect(theFace.face);
+
+                    if (!theFace.e.empty()) {
+                     cv::detail::tracking::tbm::CosDistance cosd = cv::detail::tracking::tbm::CosDistance(vec.size());
+                     float dcos = cosd.compute(vec, theFace.e);
+                     cout << "Estimated Cv Cosine Similarity " << dcos << endl;
+                    }
+
+                    theFace.e=vec;
                     if (cx && embeddings && store) {
                         pe.save(vec, label);
                         store=false;
@@ -430,6 +444,7 @@ int connect_db(char *cinfo)
     try {
         cx=new pqxx::connection(cinfo);
     } catch (std::exception &e) {
+        std::cerr << e.what() << std::endl;
         return -1;
     }
     return 1;
@@ -466,11 +481,14 @@ int main(int argc, char **argv)
     printf("DB: %s\n", dbopts);
     printf("Camera: %d, skip: %d\n", camera_id, skip_frame);
 
-    connect_db(dbopts);
-    pe.cx=cx;
-    pe.of=&of;
-    pe.load_persons();
-    pe.load_embeddings();
+    if (connect_db(dbopts)>0) {
+      pe.cx=cx;
+      pe.of=&of;
+      pe.load_persons();
+      pe.load_embeddings();
+    } else {
+      printf("No database\n");
+    }
 
     mqtt.connect();
 
