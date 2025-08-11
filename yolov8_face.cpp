@@ -46,17 +46,20 @@ cv::Mat YOLOv8_face::resize_image(const cv::Mat srcimg, int *newh, int *neww, in
     return dstimg;
 }
 
-void YOLOv8_face::getRotatedFace(const cv::Mat &frame, cv::Mat &output, const cv::Rect &roi, const vector<Point> landmark)
+void YOLOv8_face::getRotatedFace(const cv::Mat &frame, cv::Mat &output, int faceIndex)
 {
+    vector<Point> landmark=landmarks[faceIndex];
+    cv::Rect roi=boxes[faceIndex];
+
     // Eyes
     Point d = landmark[0]-landmark[1];
     float angle = (atan2f((float)d.y, (float)d.x) * 180.f / CV_PI) - 180.f + 360.f;
     float dist = sqrtf(powf(d.y, 2)+powf(d.x, 2));
 
     if (angle>180.0) angle=-(360.f-angle);
-    angle=avg_angle.add(angle);
+    //angle=avg_angle.add(angle);
 
-    Point nose = landmark[2];
+    Point nose=landmark[2];
     Point center=(landmark[0]+landmark[1]+landmark[2])*0.3333;
 
     //printf("EYES: %f.2 deg, dist: %f.2 \n", angle, dist);
