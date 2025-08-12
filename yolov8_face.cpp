@@ -205,7 +205,7 @@ int YOLOv8_face::detect(cv::Mat &srcimg)
     float rh = (float)srcimg.rows / newh;
     float rw = (float)srcimg.cols / neww;
 
-    cout << "SRC:" << srcimg.cols << ", " << srcimg.rows << " - " << rw << ", " << rh << endl;
+    // cout << "SRC:" << srcimg.cols << ", " << srcimg.rows << " - " << rw << ", " << rh << endl;
 
     generate_proposal(outs[0], srcimg.rows, srcimg.cols, rh, rw, padh, padw);
     generate_proposal(outs[1], srcimg.rows, srcimg.cols, rh, rw, padh, padw);

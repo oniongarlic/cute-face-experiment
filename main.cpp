@@ -96,7 +96,7 @@ int load_embeddings()
 
       of->store(m, id);
 
-      embeddings[id]=m;
+      m.copyTo(embeddings[id]);
     }
 
     t.commit();
@@ -130,10 +130,35 @@ int load_persons()
     return persons.size();
 }
 
+cv::Mat get_embedding(int id)
+{
+    cv::Mat e(1, 128, CV_32F);
+
+    if (auto search = embeddings.find(id); search != embeddings.end()) {
+        cout << id << search->second << endl;
+
+        e=search->second;
+    }
+
+    return e;
+}
+
+std::string get_name(int id) const
+{
+    if (auto search = persons.find(id); search != persons.end()) {
+        cout << id << search->second << endl;
+	return search->second;
+    }
+
+    return "";
+}
+
     OpenFace *of;
     pqxx::connection *cx;
     std::map<int, cv::Mat> embeddings;
     std::map<int, std::string> persons;
+
+    int current;
 };
 
 Persons pe;
@@ -225,6 +250,8 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
 
     const cv::Scalar purple	(128.0, 0.0, 128.0);
 
+    cv::Mat se; // compare to
+
     if (camera>-1) {
         cap.open(camera, CAP_V4L2);
         cap.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'));
@@ -291,31 +318,40 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
                 // focus.isFocused(theFace.face, peaking);
 
                 if (embeddings) {
-                    cv::Mat rface;
-                    printf("Getting face embeddings\n");
+                    float dcos;
+                    cv::Mat rface, fe;
 
                     face.getRotatedFace(scaled, rface, i);
-
                     imshow("RotatedFace", rface);
 
-                    vec=of.detect(rface);
+                    fe=of.detect(rface);
+                    visualize_embedding(fe);
 
                     if (!theFace.e.empty()) {
-                     cv::detail::tracking::tbm::CosDistance cosd = cv::detail::tracking::tbm::CosDistance(vec.size());
-                     float dcos = cosd.compute(vec, theFace.e);
-                     cout << "Estimated Cv Cosine Similarity " << dcos << endl;
+                     cv::detail::tracking::tbm::CosDistance cosd = cv::detail::tracking::tbm::CosDistance(fe.size());
+                     dcos = cosd.compute(fe, theFace.e);
+                     printf("CosDist: %f\n", dcos);
+                     //cout << "Current: " << fe << "\nPrevious: " << theFace.e << endl;
+                     fe.copyTo(theFace.e);
+                    } else {
+                     //cout << "Initial e" << fe << endl;
+                     fe.copyTo(theFace.e);
                     }
 
-                    visualize_embedding(vec);
-
-                    theFace.e=vec;
                     if (cx && embeddings && store) {
-                        pe.save(vec, label);
+                        pe.save(fe, label);
                         store=false;
                     }
                     if (cx && embeddings && predict) {
-                        of.predict(vec);
+                        of.predict(fe);
                     }
+
+                    if (!se.empty()) {
+                     cv::detail::tracking::tbm::CosDistance cosd = cv::detail::tracking::tbm::CosDistance(fe.size());
+                     float sdcos = cosd.compute(fe, se);
+                     printf("CompareFaceDist: %f\n", sdcos);
+                    }
+
                 }
 
                 if (trackFace && tracking==false) {
@@ -403,7 +439,7 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
         case 's':
             if (f>0 && embeddings) {
                 printf("Adding face with label: %d\n", label);
-                of.store(vec, label);
+                of.store(theFace.e, label);
             }
             break;
         case 'w':
@@ -439,10 +475,14 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
         case '+':
             label++;
             printf("Person ID: %d\n", label);
+            pe.get_name(label);
+            se=pe.get_embedding(label);
             break;
         case '-':
             label--;
             printf("Person ID: %d\n", label);
+            pe.get_name(label);
+            se=pe.get_embedding(label);
             break;
         case 'm':
             trackFace=true;
