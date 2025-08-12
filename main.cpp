@@ -33,6 +33,7 @@ static const string kWinMask = "Mask";
 int simulatedFocus=0;
 int imageBrightness=0;
 int imageContrast=33;
+int personid=-1;
 
 int avgc=0;
 cv::Mat p;
@@ -516,11 +517,15 @@ int main(int argc, char **argv)
 
     SelfieSegment ss("/data/AI/selfie_segmenter.tflite");
 
-    while ((opt = getopt(argc, argv, "f:d:c:s")) != -1) {
+    while ((opt = getopt(argc, argv, "f:d:c:p:s")) != -1) {
         switch(opt) {
         case 'f':
             input=optarg;
+            camera_id=-1;
             break;
+	case 'p':
+            personid=atoi(optarg);
+	    break;
         case 'd':
             dbopts=optarg;
             break;
