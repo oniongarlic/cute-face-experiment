@@ -196,6 +196,13 @@ void detect_from_image(YOLOv8_face &face, OpenFace &of, const char *file)
     waitKey(0);
 }
 
+void visualize_embedding(cv::Mat e)
+{
+    cv::Mat eg;
+    e.convertTo(eg, CV_8U, 127.5, 127.5);
+    cv::resize(eg, eg, cv::Size(512, 128), 0, 0, cv::INTER_NEAREST);
+    imshow("Embedding", eg);
+}
 
 void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int camera, string file="")
 {
@@ -292,6 +299,8 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
                      float dcos = cosd.compute(vec, theFace.e);
                      cout << "Estimated Cv Cosine Similarity " << dcos << endl;
                     }
+
+                    visualize_embedding(vec);
 
                     theFace.e=vec;
                     if (cx && embeddings && store) {
