@@ -21,7 +21,7 @@ public:
     double faceArea=0; // normalized 0-1
     
     void drawPred(cv::Mat &frame, int faceIndex);
-    void getRotatedFace(const cv::Mat& frame, cv::Mat &output, const cv::Rect &roi, const std::vector<cv::Point> landmark);
+    void getRotatedFace(const cv::Mat& frame, cv::Mat &output, int faceIndex);
     int getLargestFace();
     
     cv::Rect getFace(int idx) { return boxes[faces[idx]]; }

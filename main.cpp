@@ -291,8 +291,14 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
                 // focus.isFocused(theFace.face, peaking);
 
                 if (embeddings) {
+                    cv::Mat rface;
                     printf("Getting face embeddings\n");
-                    vec=of.detect(theFace.face);
+
+                    face.getRotatedFace(scaled, rface, i);
+
+                    imshow("RotatedFace", rface);
+
+                    vec=of.detect(rface);
 
                     if (!theFace.e.empty()) {
                      cv::detail::tracking::tbm::CosDistance cosd = cv::detail::tracking::tbm::CosDistance(vec.size());
