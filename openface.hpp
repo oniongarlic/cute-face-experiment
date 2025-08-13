@@ -1,6 +1,5 @@
-#include <fstream>
-#include <sstream>
-#include <iostream>
+#ifndef OPENFACE_H
+#define OPENFACE_H
 
 #include <opencv2/opencv.hpp>
 #include <opencv2/dnn.hpp>
@@ -22,3 +21,5 @@ private:
 	cv::Mat trainingData;
 	cv::Mat labels;
 };
+
+#endif

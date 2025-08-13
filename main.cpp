@@ -21,6 +21,7 @@
 #include "selfiesegment.hpp"
 #include "focus_check.hpp"
 #include "yolov8_face.h"
+#include "persons.h"
 
 using namespace cv;
 using namespace dnn;
@@ -48,121 +49,7 @@ bool trackFace=false;
 
 int skip_frame=0;
 
-class Persons
-{
-public:
-void save(cv::Mat vec, int faceid)
-{
-    std::string s;
-    std::string e;
-
-    e << vec;
-
-    s="INSERT INTO faces (person, embedding) VALUES ("+std::to_string(faceid)+",'"+e+"');";
-
-    pqxx::work t(*cx);
-    t.exec(s);
-    t.commit();
-}
-
-int load_embeddings()
-{
-    std::string s;
-
-    s="SELECT person,AVG(embedding) AS e FROM faces GROUP BY person";
-
-    pqxx::work t(*cx);
-
-    auto res=t.exec(s);
-
-    embeddings.clear();
-    for (const auto &row : res) {
-      std::vector<float> tmp;
-      int id=row["person"].as<int>();
-      std::string e=row["e"].as<std::string>();
-
-      cout << id << " = " << e << endl;
-
-      // remove []
-      std::stringstream se(e.substr(1, e.size()-2));
-
-      // get the numbers x,y,x,,,,
-      std::string t;
-      while (std::getline(se, t, ',')) {
-         cout << t << endl;
-         tmp.push_back(std::stof(t));
-      }
-
-      cv::Mat m(1, 128, CV_32F, tmp.data());
-
-      of->store(m, id);
-
-      m.copyTo(embeddings[id]);
-    }
-
-    t.commit();
-
-    of->train();
-
-    return embeddings.size();
-}
-int load_persons()
-{
-    std::string s;
-
-    s="SELECT person,name FROM persons";
-
-    pqxx::work t(*cx);
-
-    auto res=t.exec(s);
-
-    persons.clear();
-    for (const auto &row : res) {
-      int id=row["person"].as<int>();
-      std::string n=row["name"].as<std::string>();
-
-      cout << id << " = " << n << endl;
-
-      persons[id]=n;
-    }
-
-    t.commit();
-
-    return persons.size();
-}
-
-cv::Mat get_embedding(int id)
-{
-    cv::Mat e(1, 128, CV_32F);
-
-    if (auto search = embeddings.find(id); search != embeddings.end()) {
-        cout << id << search->second << endl;
-
-        e=search->second;
-    }
-
-    return e;
-}
-
-std::string get_name(int id) const
-{
-    if (auto search = persons.find(id); search != persons.end()) {
-        cout << id << search->second << endl;
-	return search->second;
-    }
-
-    return "";
-}
-
-    OpenFace *of;
-    pqxx::connection *cx;
-    std::map<int, cv::Mat> embeddings;
-    std::map<int, std::string> persons;
-
-    int current;
-};
-
-Persons pe;
+Persons *pe;
 
 class Face
 {
@@ -286,11 +173,11 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
         tm.start();
 
 #if 0 
-       // double scale = 1024.0f/frame.size().width;
+        // double scale = 1024.0f/frame.size().width;
         double scale=0.5;
         resize(frame, scaled, Size(), scale, scale, INTER_AREA);
 #else
-	scaled=frame;
+        scaled=frame;
 #endif
 
         if (imageContrast!=33 || imageBrightness!=0) {
@@ -329,18 +216,18 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
                     visualize_embedding(fe);
 
                     if (!theFace.e.empty()) {
-                     cv::detail::tracking::tbm::CosDistance cosd = cv::detail::tracking::tbm::CosDistance(fe.size());
-                     dcos = cosd.compute(fe, theFace.e);
-                     printf("CosDist: %f\n", dcos);
-                     //cout << "Current: " << fe << "\nPrevious: " << theFace.e << endl;
-                     fe.copyTo(theFace.e);
+                        cv::detail::tracking::tbm::CosDistance cosd = cv::detail::tracking::tbm::CosDistance(fe.size());
+                        dcos = cosd.compute(fe, theFace.e);
+                        printf("CosDist: %f\n", dcos);
+                        //cout << "Current: " << fe << "\nPrevious: " << theFace.e << endl;
+                        fe.copyTo(theFace.e);
                     } else {
-                     //cout << "Initial e" << fe << endl;
-                     fe.copyTo(theFace.e);
+                        //cout << "Initial e" << fe << endl;
+                        fe.copyTo(theFace.e);
                     }
 
                     if (cx && embeddings && store) {
-                        pe.save(fe, label);
+                        pe->save(fe, label);
                         store=false;
                     }
                     if (cx && embeddings && predict) {
@@ -348,9 +235,9 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
                     }
 
                     if (!se.empty()) {
-                     cv::detail::tracking::tbm::CosDistance cosd = cv::detail::tracking::tbm::CosDistance(fe.size());
-                     float sdcos = cosd.compute(fe, se);
-                     printf("CompareFaceDist: %f\n", sdcos);
+                        cv::detail::tracking::tbm::CosDistance cosd = cv::detail::tracking::tbm::CosDistance(fe.size());
+                        float sdcos = cosd.compute(fe, se);
+                        printf("CompareFaceDist: %f\n", sdcos);
                     }
 
                 }
@@ -474,16 +361,16 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
             predict=!predict;
             break;
         case '+':
-            label++;
-            printf("Person ID: %d\n", label);
-            pe.get_name(label);
-            se=pe.get_embedding(label);
+            label=pe->next();
+            printf("Person ID: %d\n", pe->current());
+            pe->get_name(label);
+            se=pe->get_embedding(label);
             break;
         case '-':
-            label--;
-            printf("Person ID: %d\n", label);
-            pe.get_name(label);
-            se=pe.get_embedding(label);
+            label=pe->previous();
+            printf("Person ID: %d\n", pe->current());
+            pe->get_name(label);
+            se=pe->get_embedding(label);
             break;
         case 'm':
             trackFace=true;
@@ -523,9 +410,9 @@ int main(int argc, char **argv)
             input=optarg;
             camera_id=-1;
             break;
-	case 'p':
+        case 'p':
             personid=atoi(optarg);
-	    break;
+            break;
         case 'd':
             dbopts=optarg;
             break;
@@ -542,12 +429,11 @@ int main(int argc, char **argv)
     printf("Camera: %d, skip: %d\n", camera_id, skip_frame);
 
     if (connect_db(dbopts)>0) {
-      pe.cx=cx;
-      pe.of=&of;
-      pe.load_persons();
-      pe.load_embeddings();
+        pe=new Persons(&of, cx);
+        int r=pe->load();
+        printf("Loaded %d persons\n", r);
     } else {
-      printf("No database\n");
+        printf("No database\n");
     }
 
     mqtt.connect();
@@ -567,8 +453,8 @@ int main(int argc, char **argv)
     destroyAllWindows();
 
     if (cx) {
-      cx->disconnect();
-      delete cx;
+        cx->disconnect();
+        delete cx;
     }
 
     return 0;
