@@ -159,6 +159,8 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
         return;
     }
 
+    label=pe->current();
+
     double capw=cap.get(cv::CAP_PROP_FRAME_WIDTH);
     double caph=cap.get(cv::CAP_PROP_FRAME_HEIGHT);
 
@@ -227,7 +229,7 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
                     }
 
                     if (cx && embeddings && store) {
-                        pe->save(fe, label);
+                        pe->save(fe);
                         store=false;
                     }
                     if (cx && embeddings && predict) {
@@ -432,6 +434,13 @@ int main(int argc, char **argv)
         pe=new Persons(&of, cx);
         int r=pe->load();
         printf("Loaded %d persons\n", r);
+
+        if (personid>0) {
+            int t=pe->find(personid);
+            if (t>0)
+                printf("Default user set to %d\n", t);
+        }
+
     } else {
         printf("No database\n");
     }
