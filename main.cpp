@@ -31,10 +31,20 @@ static const string kWinName = "Face detection use OpenCV";
 static const string kWinRoi = "ROI";
 static const string kWinMask = "Mask";
 
+struct opts {
+    bool trackFace=false;
+    int skip_frame=0;
+    bool embeddings=false;
+    bool store=false;
+    bool oneshot=true;
+    int person=-1;
+};
+
+struct opts ao;
+
 int simulatedFocus=0;
 int imageBrightness=0;
 int imageContrast=33;
-int personid=-1;
 
 int avgc=0;
 cv::Mat p;
@@ -126,8 +136,6 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
     FocusCheck focus;
 
     bool run=true;
-    bool embeddings=false;
-    bool store=false;
     bool peaking=true;
     bool haveface=false;
     bool tracking=false;
@@ -169,6 +177,7 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
     while (cap.read(frame) && run) {
         cv::Mat vec;
         cv::Mat scaled;
+        float sdcos;
 
         frames++;
 
@@ -207,7 +216,7 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
                 focus.simulatedFocus=simulatedFocus;
                 // focus.isFocused(theFace.face, peaking);
 
-                if (embeddings) {
+                if (ao.embeddings) {
                     float dcos;
                     cv::Mat rface, fe;
 
@@ -228,17 +237,18 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
                         fe.copyTo(theFace.e);
                     }
 
-                    if (cx && embeddings && store) {
+                    if (cx && ao.embeddings && ao.store) {
                         pe->save(fe);
-                        store=false;
+                        if (ao.oneshot)
+                            ao.store=false;
                     }
-                    if (cx && embeddings && predict) {
+                    if (cx && ao.embeddings && predict) {
                         of.predict(fe);
                     }
 
                     if (!se.empty()) {
                         cv::detail::tracking::tbm::CosDistance cosd = cv::detail::tracking::tbm::CosDistance(fe.size());
-                        float sdcos = cosd.compute(fe, se);
+                        sdcos = cosd.compute(fe, se);
                         printf("CompareFaceDist: %f\n", sdcos);
                     }
 
@@ -293,8 +303,11 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
 
         }
 
-        putText(scaled, std::to_string(label), Point(10, 10), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(128, 255, 128), 1);
-        putText(scaled, std::to_string(f), Point(10, 30), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(128, 255, 128), 1);
+        const float closedist=0.1;
+
+        putText(scaled, std::to_string(pe->current()), Point(10, 20), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(128, 255, 128));
+        putText(scaled, pe->current_name(), Point(30, 20), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(sdcos<closedist ? 255 : 128, 255, 128));
+        putText(scaled, std::to_string(f), Point(10, 40), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(128, 255, 128));
 
         if (tracking) {
             cv::Rect2i troi;
@@ -327,18 +340,18 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
             run=false;
             break;
         case 's':
-            if (f>0 && embeddings) {
+            if (f>0 && ao.embeddings) {
                 printf("Adding face with label: %d\n", label);
                 of.store(theFace.e, label);
             }
             break;
         case 'w':
-            store=!store;
-            printf("Embeddings store to database enabled: %d\n", store);
+            ao.store=!ao.store;
+            printf("Embeddings store to database enabled: %d\n", ao.store);
             break;
         case 'e':
-            embeddings=!embeddings;
-            printf("Embeddings enabled: %d\n", embeddings);
+            ao.embeddings=!ao.embeddings;
+            printf("Embeddings enabled: %d\n", ao.embeddings);
             break;
         case 'p':
             peaking=!peaking;
@@ -406,14 +419,14 @@ int main(int argc, char **argv)
 
     SelfieSegment ss("/data/AI/selfie_segmenter.tflite");
 
-    while ((opt = getopt(argc, argv, "f:d:c:p:s")) != -1) {
+    while ((opt = getopt(argc, argv, "f:d:c:p:sew")) != -1) {
         switch(opt) {
         case 'f':
             input=optarg;
             camera_id=-1;
             break;
         case 'p':
-            personid=atoi(optarg);
+            ao.person=atoi(optarg);
             break;
         case 'd':
             dbopts=optarg;
@@ -423,6 +436,13 @@ int main(int argc, char **argv)
             break;
         case 's':
             skip_frame=1;
+            break;
+        case 'e':
+            ao.embeddings=true;
+            break;
+        case 'w':
+            ao.store=true;
+            ao.oneshot=false;
             break;
         }
     }
@@ -435,8 +455,8 @@ int main(int argc, char **argv)
         int r=pe->load();
         printf("Loaded %d persons\n", r);
 
-        if (personid>0) {
-            int t=pe->find(personid);
+        if (ao.person>0) {
+            int t=pe->find(ao.person);
             if (t>0)
                 printf("Default user set to %d\n", t);
         }
