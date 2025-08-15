@@ -123,11 +123,11 @@ void detect_from_image(YOLOv8_face &face, OpenFace &of, const char *file)
     waitKey(0);
 }
 
-void visualize_embedding(cv::Mat e)
+void visualize_embedding(const cv::Mat &e)
 {
     cv::Mat eg;
     e.convertTo(eg, CV_8U, 127.5, 127.5);
-    cv::resize(eg, eg, cv::Size(512, 128), 0, 0, cv::INTER_NEAREST);
+    cv::resize(eg, eg, cv::Size(256, 32), 0, 0, cv::INTER_NEAREST);
     imshow("Embedding", eg);
 }
 
@@ -181,7 +181,7 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
     while (cap.read(frame) && run) {
         cv::Mat vec;
         cv::Mat scaled;
-        float sdcos;
+        float sdcos,dcos;
 
         frames++;
 
@@ -221,7 +221,6 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
                 // focus.isFocused(theFace.face, peaking);
 
                 if (ao.embeddings) {
-                    float dcos;
                     cv::Mat rface, fe;
 
                     face.getRotatedFace(scaled, rface, i);
@@ -233,7 +232,7 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
                     if (!theFace.e.empty()) {
                         cv::detail::tracking::tbm::CosDistance cosd = cv::detail::tracking::tbm::CosDistance(fe.size());
                         dcos = cosd.compute(fe, theFace.e);
-                        printf("CosDist: %f\n", dcos);
+                        // printf("CosDist: %f\n", dcos);
                         //cout << "Current: " << fe << "\nPrevious: " << theFace.e << endl;
                         fe.copyTo(theFace.e);
                     } else {
@@ -292,7 +291,7 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
 
                 mqtt.publish_point("face", n, face.faceArea, conf);
 
-                printf("Face size: %f (%f, %f) (%f) (%f,%f)\n", face.faceArea, n.x, n.y, conf, theFace.ma_h.get(), theFace.ma_v.get());
+                //printf("Face size: %f (%f, %f) (%f) (%f,%f)\n", face.faceArea, n.x, n.y, conf, theFace.ma_h.get(), theFace.ma_v.get());
 
                 face.drawPred(scaled, i);
 
@@ -306,12 +305,6 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
             }
 
         }
-
-        const float closedist=0.1;
-
-        putText(scaled, std::to_string(pe->current()), Point(10, 20), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(128, 255, 128));
-        putText(scaled, pe->current_name(), Point(30, 20), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(sdcos<closedist ? 255 : 128, 255, 128));
-        putText(scaled, std::to_string(f), Point(10, 40), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(128, 255, 128));
 
         if (tracking) {
             cv::Rect2i troi;
@@ -330,11 +323,20 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
             }
         }
 
-        imshow(kWinName, scaled);
-
         tm.stop();
 
-        printf("FPS: %f, Faces: (%d) %d\n", tm.getFPS(), f, face.faceCount);
+        const float closedist=0.1;
+        putText(scaled, std::to_string(f), Point(10, 40), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(128, 255, 128));
+        putText(scaled, std::to_string(tm.getFPS()), Point(10, 60), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(192, 255, 192));
+        if (ao.embeddings) {
+            putText(scaled, std::to_string(pe->current()), Point(10, 20), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(128, 255, 128));
+            putText(scaled, pe->current_name(), Point(30, 20), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(sdcos<closedist ? 255 : 128, 255, 128));
+            putText(scaled, std::to_string(dcos), Point(10, 80), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(192, 255, 192));
+        }
+
+        imshow(kWinName, scaled);
+
+        //printf("FPS: %f, Faces: (%d) %d\n", tm.getFPS(), f, face.faceCount);
 
         mqtt.loop();
 
