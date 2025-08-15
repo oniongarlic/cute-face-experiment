@@ -6,10 +6,15 @@
 #include <opencv2/imgproc.hpp>
 #include <opencv2/ml.hpp>
 
+typedef struct OpenFaceOptions {
+    std::string model;
+    bool use_gpu;
+} OpenFaceOptions;
+
 class OpenFace
 {
 public:
-	OpenFace(std::string modelpath);
+    OpenFace(const OpenFaceOptions &opts);
 	cv::Mat detect(cv::Mat &frame);
 	void store(const cv::Mat &vec, int label);
 	void train();

@@ -9,10 +9,17 @@
 
 #include "moving_average.hpp"
 
+typedef struct YoloFaceOptions {
+    std::string model;
+    bool use_gpu;
+    float confThreshold;
+    float nmsThreshold;
+} YoloFaceOptions;
+
 class YOLOv8_face
 {
 public:
-    YOLOv8_face(std::string modelpath, float confThreshold, float nmsThreshold);
+    YOLOv8_face(const YoloFaceOptions &opts);
     int detect(cv::Mat& frame);
     cv::Mat theFace;
     cv::Rect lgbox;

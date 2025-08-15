@@ -9,14 +9,16 @@ static inline float sigmoid_x(float x)
     return static_cast<float>(1.f / (1.f + expf(-x)));
 }
 
-YOLOv8_face::YOLOv8_face(string modelpath, float confThreshold, float nmsThreshold)
+YOLOv8_face::YOLOv8_face(const YoloFaceOptions &opts)
 {
-    this->confThreshold = confThreshold;
-    this->nmsThreshold = nmsThreshold;
-    this->net = cv::dnn::readNet(modelpath);
+    this->confThreshold = opts.confThreshold;
+    this->nmsThreshold = opts.nmsThreshold;
+    this->net = cv::dnn::readNet(opts.model);
 
-    //net.setPreferableBackend(cv::dnn::DNN_BACKEND_CUDA);
-    //net.setPreferableTarget(cv::dnn::DNN_TARGET_CUDA);
+    if (opts.use_gpu) {
+        net.setPreferableBackend(cv::dnn::DNN_BACKEND_CUDA);
+        net.setPreferableTarget(cv::dnn::DNN_TARGET_CUDA);
+    }
 }
 
 cv::Mat YOLOv8_face::resize_image(const cv::Mat srcimg, int *newh, int *neww, int *padh, int *padw)

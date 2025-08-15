@@ -32,12 +32,16 @@ static const string kWinRoi = "ROI";
 static const string kWinMask = "Mask";
 
 struct opts {
+    bool use_gpu=false;
     bool trackFace=false;
     int skip_frame=0;
     bool embeddings=false;
     bool store=false;
     bool oneshot=true;
     int person=-1;
+
+    float faceThreshold=0.85;
+    float nmsThreshold=0.5;
 };
 
 struct opts ao;
@@ -414,12 +418,7 @@ int main(int argc, char **argv)
     char *dbopts=NULL;
     char *input=NULL;
 
-    YOLOv8_face face("weights/yolov8n-face.onnx", 0.45, 0.5);
-    OpenFace of("weights/nn4.v2.t7");
-
-    SelfieSegment ss("/data/AI/selfie_segmenter.tflite");
-
-    while ((opt = getopt(argc, argv, "f:d:c:p:sew")) != -1) {
+    while ((opt = getopt(argc, argv, "f:d:c:p:sewg")) != -1) {
         switch(opt) {
         case 'f':
             input=optarg;
@@ -444,8 +443,28 @@ int main(int argc, char **argv)
             ao.store=true;
             ao.oneshot=false;
             break;
+        case 'g':
+            ao.use_gpu=true;
+            break;
         }
     }
+
+    YoloFaceOptions yfo;
+
+    yfo.model="weights/yolov8n-face.onnx";
+    yfo.use_gpu=ao.use_gpu;
+    yfo.confThreshold=ao.faceThreshold;
+    yfo.nmsThreshold=ao.nmsThreshold;
+
+    YOLOv8_face face(yfo);
+
+    OpenFaceOptions ofo;
+
+    ofo.model="weights/nn4.v2.t7";
+    ofo.use_gpu=ao.use_gpu;
+
+    OpenFace of(ofo);
+    SelfieSegment ss("/data/AI/selfie_segmenter.tflite");
 
     printf("DB: %s\n", dbopts);
     printf("Camera: %d, skip: %d\n", camera_id, skip_frame);
