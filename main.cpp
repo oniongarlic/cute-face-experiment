@@ -40,7 +40,7 @@ struct opts {
     bool oneshot=true;
     int person=-1;
 
-    float faceThreshold=0.85;
+    float faceThreshold=0.65;
     float nmsThreshold=0.5;
 };
 
