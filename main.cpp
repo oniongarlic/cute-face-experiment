@@ -68,9 +68,9 @@ Persons *pe;
 class Face
 {
 public:
-    Point center;
-    Point nose;
-    Point mouth;
+    Point2d center;
+    Point2d nose;
+    Point2d mouth;
 
     float confidence;
 
@@ -333,6 +333,10 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
             putText(scaled, pe->current_name(), Point(30, 20), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(sdcos<closedist ? 255 : 128, 255, 128));
             putText(scaled, std::to_string(dcos), Point(10, 80), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(192, 255, 192));
         }
+        if (f>0) {
+            putText(scaled, std::to_string(theFace.nose.x), Point(10, 160), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(128, 255, 128));
+            putText(scaled, std::to_string(theFace.nose.y), Point(10, 180), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(128, 255, 128));
+        }
 
         imshow(kWinName, scaled);
 
@@ -492,9 +496,9 @@ int main(int argc, char **argv)
     //namedWindow(kWinRoi, WINDOW_NORMAL);
     //namedWindow(kWinMask, WINDOW_NORMAL);
 
-    createTrackbar("Focus:", kWinName, &simulatedFocus, 400);
-    createTrackbar("Contrast:", kWinName, &imageContrast, 100);
-    createTrackbar("Brightness:", kWinName, &imageBrightness, 100);
+    createTrackbar("Focus:", kWinName, NULL, 400, [](int v, void *data){ simulatedFocus=v; });
+    createTrackbar("Contrast:", kWinName, &imageContrast, 100, [](int v, void *data){ imageContrast=v; });
+    createTrackbar("Brightness:", kWinName, NULL, 100, [](int v, void *data){ imageBrightness=v; });
 
     p=cv::Mat(1, 128, CV_64F);
 
