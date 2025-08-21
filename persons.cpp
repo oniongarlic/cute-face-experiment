@@ -26,11 +26,34 @@ void Persons::save(cv::Mat vec)
     save(vec, current());
 }
 
+int Persons::query_closest(cv::Mat vec)
+{
+    std::string s;
+    std::string e;
+    int id=-1;
+
+    e << vec;
+
+    s="SELECT person FROM faces ORDER BY embedding <=> '"+e+"' LIMIT 1";
+
+    cout << s << endl;
+
+    pqxx::work t(*cx);
+
+    auto res=t.exec(s);
+    for (const auto &row : res) {
+        id=row["person"].as<int>();
+    }
+    t.commit();
+
+    return id;
+}
+
 int Persons::load_embeddings()
 {
     std::string s;
 
-    s="SELECT person,AVG(embedding) AS e FROM faces GROUP BY person";
+    s="SELECT person,embedding AS e FROM faces ORDER BY person";
 
     pqxx::work t(*cx);
 
@@ -42,7 +65,7 @@ int Persons::load_embeddings()
         int id=row["person"].as<int>();
         std::string e=row["e"].as<std::string>();
 
-        cout << id << " = " << e << endl;
+        //cout << id << " = " << e << endl;
 
         // remove []
         std::stringstream se(e.substr(1, e.size()-2));
@@ -50,7 +73,7 @@ int Persons::load_embeddings()
         // get the numbers x,y,x,,,,
         std::string t;
         while (std::getline(se, t, ',')) {
-            cout << t << endl;
+            //cout << t << endl;
             tmp.push_back(std::stof(t));
         }
 
