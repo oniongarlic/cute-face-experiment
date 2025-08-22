@@ -123,12 +123,15 @@ void detect_from_image(YOLOv8_face &face, OpenFace &of, const char *file)
     waitKey(0);
 }
 
-void visualize_embedding(const cv::Mat &e)
+void visualize_embedding(cv::Mat &frame, const cv::Mat &e)
 {
     cv::Mat eg;
     e.convertTo(eg, CV_8U, 127.5, 127.5);
     cv::resize(eg, eg, cv::Size(256, 32), 0, 0, cv::INTER_NEAREST);
-    imshow("Embedding", eg);
+    cv::Mat roi=frame(cv::Rect(0,0,256,32));
+    cv:cvtColor(eg, eg, cv::COLOR_GRAY2BGR);
+    eg.copyTo(roi);
+    // imshow("Embedding", eg);
 }
 
 void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int camera, string file="")
@@ -227,7 +230,7 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
                     imshow("RotatedFace", rface);
 
                     fe=of.detect(rface);
-                    visualize_embedding(fe);
+                    visualize_embedding(scaled, fe);
 
                     if (!theFace.e.empty()) {
                         cv::detail::tracking::tbm::CosDistance cosd = cv::detail::tracking::tbm::CosDistance(fe.size());
