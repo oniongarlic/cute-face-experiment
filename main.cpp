@@ -255,7 +255,7 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
                     if (!se.empty()) {
                         cv::detail::tracking::tbm::CosDistance cosd = cv::detail::tracking::tbm::CosDistance(fe.size());
                         sdcos = cosd.compute(fe, se);
-                        printf("CompareFaceDist: %f\n", sdcos);
+                        //printf("CompareFaceDist: %f\n", sdcos);
                     }
 
                 }
@@ -294,7 +294,7 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
 
                 mqtt.publish_point("face", n, face.faceArea, conf);
 
-                //printf("Face size: %f (%f, %f) (%f) (%f,%f)\n", face.faceArea, n.x, n.y, conf, theFace.ma_h.get(), theFace.ma_v.get());
+                // printf("Face size: %f (%f, %f) (%f) (%f,%f)\n", face.faceArea, n.x, n.y, conf, theFace.ma_h.get(), theFace.ma_v.get());
 
                 face.drawPred(scaled, i);
 
@@ -335,6 +335,7 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
             putText(scaled, std::to_string(pe->current()), Point(10, 20), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(128, 255, 128));
             putText(scaled, pe->current_name(), Point(30, 20), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(sdcos<closedist ? 255 : 128, 255, 128));
             putText(scaled, std::to_string(dcos), Point(10, 80), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(192, 255, 192));
+            putText(scaled, std::to_string(sdcos), Point(10, 100), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(192, 255, 192));
         }
         if (f>0) {
             putText(scaled, std::to_string(theFace.nose.x), Point(10, 160), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(128, 255, 128));
@@ -351,6 +352,12 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
         switch (key) {
         case 'q':
             run=false;
+            break;
+        case 'b':
+            if (f>0 && ao.embeddings) {
+                int id=pe->query_closest(theFace.e);
+                printf("db says: %d\n", id);
+            }
             break;
         case 's':
             if (f>0 && ao.embeddings) {
@@ -378,6 +385,7 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
             if (avgc>5) {
                 printf("Average: %d\n", avgc);
                 p.convertTo(pavg, CV_32F, avgc);
+                cv::normalize(pavg, pavg, 1.0, 0.0, NORM_L2);
                 cout << avgc << pavg << endl;
             }
             break;

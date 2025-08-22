@@ -21,6 +21,8 @@ public:
     int load_persons();
     int load();
 
+    int query_closest(cv::Mat vec);
+
     cv::Mat get_embedding(int id) const;
     std::string get_name(int id) const;
 
