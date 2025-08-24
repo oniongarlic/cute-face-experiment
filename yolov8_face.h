@@ -16,6 +16,15 @@ typedef struct YoloFaceOptions {
     float nmsThreshold;
 } YoloFaceOptions;
 
+class YoloFace {
+public:
+    cv::Rect box;
+    float confidence;
+    bool inside;
+    std::vector<cv::Point> landmarks;
+    std::vector<float> landmarkconf;
+};
+
 class YOLOv8_face
 {
 public:
@@ -31,11 +40,11 @@ public:
     void getRotatedFace(const cv::Mat& frame, cv::Mat &output, int faceIndex);
     int getLargestFace();
     
-    cv::Rect getFace(int idx) { return boxes[faces[idx]]; }
+    YoloFace getFace(int idx);
     cv::Mat getFaceMat(int idx, const cv::Mat &frame);
-    float getFaceConfidence(int idx) { return confidences[idx]; }
-    std::vector<cv::Point> getFaceLandmarks(int idx) { return landmarks[faces[idx]]; };
-    cv::Point2f getNosePosition(int faceIndex);
+    float getFaceConfidence(int idx);
+    std::vector<cv::Point> getFaceLandmarks(int idx);
+    cv::Point getNosePosition(int faceIndex);
     cv::Rect getROI(int faceIndex);
 
 private:
@@ -56,10 +65,9 @@ private:
     float srcRatioh;
     float srcRatiow;
     
-    std::vector<cv::Rect> boxes;
-    std::vector<float> confidences;
-    std::vector< std::vector<cv::Point>> landmarks;
-    std::vector<int> faces;
+    // The final list of faces
+    std::vector<YoloFace> faces;
+    std::vector<int> faceindex;
     
     void softmax_(const float* x, float* y, int length);
     void generate_proposal(const cv::Mat &out, int imgh, int imgw, float ratioh, float ratiow, int padh, int padw);

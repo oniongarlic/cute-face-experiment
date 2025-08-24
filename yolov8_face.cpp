@@ -21,6 +21,19 @@ YOLOv8_face::YOLOv8_face(const YoloFaceOptions &opts)
     }
 }
 
+void YOLOv8_face::softmax_(const float *x, float *y, int length)
+{
+    float sum = 0;
+    int i = 0;
+    for (i = 0; i < length; i++) {
+        y[i] = expf(x[i]);
+        sum += y[i];
+    }
+    for (i = 0; i < length; i++) {
+        y[i] /= sum;
+    }
+}
+
 cv::Mat YOLOv8_face::resize_image(const cv::Mat srcimg, int *newh, int *neww, int *padh, int *padw)
 {
     int srch = srcimg.rows, srcw = srcimg.cols;
@@ -50,12 +63,14 @@ cv::Mat YOLOv8_face::resize_image(const cv::Mat srcimg, int *newh, int *neww, in
 
 void YOLOv8_face::getRotatedFace(const cv::Mat &frame, cv::Mat &output, int faceIndex)
 {
-    vector<Point> landmark=landmarks[faceIndex];
-    cv::Rect roi=boxes[faceIndex];
+    std::vector<cv::Point> landmark=faces[faceIndex].landmarks;
+    cv::Rect roi=faces[faceIndex].box;
+
+    imshow("roi", frame(roi));
 
     // Eyes
     Point d = landmark[0]-landmark[1];
-    float angle = (atan2f((float)d.y, (float)d.x) * 180.f / CV_PI) - 180.f + 360.f;
+    float angle = (atan2f(d.y, d.x) * 180.f / CV_PI) - 180.f + 360.f;
     float dist = sqrtf(powf(d.y, 2)+powf(d.x, 2));
 
     if (angle>180.0) angle=-(360.f-angle);
@@ -72,8 +87,10 @@ void YOLOv8_face::getRotatedFace(const cv::Mat &frame, cv::Mat &output, int face
     float mdist = sqrtf(powf(md.y, 2)+powf(md.x, 2));
 
     // Rotation
-    cv::RotatedRect rbbox=cv::RotatedRect(nose, frame.size(), angle);
+    cv::RotatedRect rbbox=cv::RotatedRect(center, frame.size(), angle);
     cv::Rect bbox=rbbox.boundingRect();
+
+    //imshow("broi", frame(bbox));
 
     rot=getRotationMatrix2D(center, angle, 1.0);
 
@@ -81,7 +98,13 @@ void YOLOv8_face::getRotatedFace(const cv::Mat &frame, cv::Mat &output, int face
     rot.at<double>(1,2) += bbox.height/2.0 - nose.y;
 
     cv::Mat dst2;
-    warpAffine(frame, dst2, rot, bbox.size(), INTER_CUBIC);
+#if 1
+    warpAffine(frame, dst2, rot, bbox.size(), INTER_LINEAR);
+//    output=dst2; return;
+#else
+    warpAffine(roi, dst2, rot, cv::Size(96,96), INTER_LINEAR);
+    output=dst2; return;
+#endif
 
     int fx,fy,wh, fhw, fhh;
     wh=std::max(roi.width, roi.height);
@@ -100,17 +123,26 @@ void YOLOv8_face::getRotatedFace(const cv::Mat &frame, cv::Mat &output, int face
 
 cv::Mat YOLOv8_face::getFaceMat(int idx, const cv::Mat &frame)
 {
-    cv::Rect roi=boxes[idx];
+    auto roi=faces[idx].box;
     roi=roi & cv::Rect(0, 0, frame.size().width, frame.size().height);
     return frame(roi);
 }
 
-cv::Point2f YOLOv8_face::getNosePosition(int faceIndex)
+float YOLOv8_face::getFaceConfidence(int idx)
 {
-    vector<Point> l=landmarks[faceIndex];
+    return faces[idx].confidence;
+}
 
-    cv::Point n=l[2];
-    cv::Point2f nose;
+std::vector<Point> YOLOv8_face::getFaceLandmarks(int idx)
+{
+    return faces[faceindex[idx]].landmarks;
+}
+
+cv::Point YOLOv8_face::getNosePosition(int idx)
+{
+    auto l=faces[idx].landmarks;
+    auto n=l[2];
+    cv::Point nose;
 
     nose.x=((float)n.x/srcRatiow)-0.5f;
     nose.y=((float)n.y/srcRatioh)-0.5f;
@@ -128,7 +160,7 @@ void YOLOv8_face::generate_proposal(const Mat &out, int imgh, int imgw, float ra
     float* ptr_cls = ptr + area * reg_max * 4;
     float* ptr_kp = ptr + area * (reg_max * 4 + num_class);
 
-//    cout << out.size[1] << "," << out.size[2] << "," << out.size[3] << " : " << area << endl;
+    // cout << out.size[1] << "," << out.size[2] << "," << out.size[3] << " : " << area << endl;
 
     for (int i = 0; i < feat_h; i++) {
         for (int j = 0; j < feat_w; j++) {
@@ -160,24 +192,45 @@ void YOLOv8_face::generate_proposal(const Mat &out, int imgh, int imgw, float ra
                 }
                 float cx = (j + 0.5f)*stride;
                 float cy = (i + 0.5f)*stride;
+
+                cout << cx << ":" << cy << endl;
+                cout << pred_ltrb[0] << endl;
+                cout << pred_ltrb[1] << endl;
+                cout << pred_ltrb[2] << endl;
+                cout << pred_ltrb[3] << endl;
+
                 float xmin = max((cx - pred_ltrb[0] - padw)*ratiow, 0.f);
                 float ymin = max((cy - pred_ltrb[1] - padh)*ratioh, 0.f);
                 float xmax = min((cx + pred_ltrb[2] - padw)*ratiow, float(imgw - 1));
                 float ymax = min((cy + pred_ltrb[3] - padh)*ratioh, float(imgh - 1));
                 Rect box = Rect(int(xmin), int(ymin), int(xmax - xmin), int(ymax - ymin));
-                boxes.push_back(box);
-                confidences.push_back(box_prob);
 
-                vector<Point> kpts(5);
-                for (int k = 0; k < 5; k++) {
+                auto face=YoloFace();
+                face.box=box;
+                face.confidence=box_prob;
+
+                face.inside=true;
+                std::vector<Point> kpts(5);
+                std::vector<float> lc;
+                for (int k = 0; k < 5; k++) {                    
                     float x = ((ptr_kp[(k * 3)*area + index] * 2 + j)*stride - padw)*ratiow;
                     float y = ((ptr_kp[(k * 3 + 1)*area + index] * 2 + i)*stride - padh)*ratioh;
                     float pt_conf = sigmoid_x(ptr_kp[(k * 3 + 2)*area + index]);
-                    kpts[k] = Point(int(x), int(y));
+                    auto l=Point(x, y);
+                    if (!(x>xmin && x<xmax && y>ymin && y<ymax))
+                        face.inside=false;
+
+                    cout << l << ":" << face.inside << "(" << x << " , " << y << ") " << pt_conf  << endl;
                     //cout << k << ": " << pt_conf << " - " << ptr_kp[(k * 3)*area + index] << "," << ptr_kp[(k * 3)*area + index] << endl;
+
+                    kpts[k]=l;
+                    lc.push_back(pt_conf);
                 }
 
-                landmarks.push_back(kpts);
+                face.landmarks=kpts;
+                face.landmarkconf=lc;
+
+                faces.push_back(face);
             }
         }
     }
@@ -194,11 +247,8 @@ int YOLOv8_face::detect(cv::Mat &srcimg)
 
     vector<cv::Mat> outs;
     // this->net.enableWinograd(false);
-    this->net.forward(outs, this->net.getUnconnectedOutLayersNames());
+    this->net.forward(outs, this->net.getUnconnectedOutLayersNames());    
 
-    boxes.clear();
-    confidences.clear();
-    landmarks.clear();
     faces.clear();
 
     srcRatioh=srcimg.rows;
@@ -207,16 +257,26 @@ int YOLOv8_face::detect(cv::Mat &srcimg)
     float rh = (float)srcimg.rows / newh;
     float rw = (float)srcimg.cols / neww;
 
-    // cout << "SRC:" << srcimg.cols << ", " << srcimg.rows << " - " << rw << ", " << rh << endl;
-
     generate_proposal(outs[0], srcimg.rows, srcimg.cols, rh, rw, padh, padw);
     generate_proposal(outs[1], srcimg.rows, srcimg.cols, rh, rw, padh, padw);
     generate_proposal(outs[2], srcimg.rows, srcimg.cols, rh, rw, padh, padw);
 
     // Perform non maximum suppression to eliminate redundant overlapping boxes with
     // lower confidences
-    cv::dnn::NMSBoxes(boxes, confidences, this->confThreshold, this->nmsThreshold, faces);
-    faceCount=faces.size();
+
+    std::vector<Rect> boxes;
+    std::vector<float>confidences;
+
+    for (size_t i = 0; i < faces.size(); ++i) {
+        const Rect b=faces[i].box;
+        const float c=faces[i].confidence;
+
+        boxes.push_back(b);
+        confidences.push_back(c);
+    }
+
+    cv::dnn::NMSBoxes(boxes, confidences, this->confThreshold, this->nmsThreshold, faceindex);
+    faceCount=faceindex.size();
 
     return faceCount;
 }
@@ -225,16 +285,16 @@ int YOLOv8_face::getLargestFace()
 {
     int area=96*96, largest=faceCount>0 ? 0 : -1;
 
-    for (size_t i = 0; i < faces.size(); ++i) {
-        int idx = faces[i];
-        const cv::Rect box = boxes[idx];
+    for (size_t i = 0; i < faceindex.size(); ++i) {
+        int idx = faceindex[i];
+        const cv::Rect box = faces[idx].box;
 
         int a=box.width*box.height;
-        if (a>area && confidences[idx]>0.60f) {
+        if (a>area && faces[idx].confidence>0.60f) {
             area=a;
             largest=idx;
         }
-	printf("BOX: %d %d (%d)\n", box.width, box.height, a);
+        // printf("BOX: %d %d (%d)\n", box.width, box.height, a);
     }
 
     faceArea=area/inpArea;
@@ -242,33 +302,22 @@ int YOLOv8_face::getLargestFace()
     return largest;
 }
 
-void YOLOv8_face::softmax_(const float *x, float *y, int length)
+YoloFace YOLOv8_face::getFace(int idx)
 {
-    float sum = 0;
-    int i = 0;
-    for (i = 0; i < length; i++) {
-        y[i] = expf(x[i]);
-        sum += y[i];
-    }
-    for (i = 0; i < length; i++) {
-        y[i] /= sum;
-    }
+    return faces[faceindex[idx]];
 }
 
 cv::Rect YOLOv8_face::getROI(int faceIndex)
 {
-    float conf=confidences[faceIndex];
-    std::vector<cv::Point> landmark=landmarks[faceIndex];
-    cv::Rect roi=boxes[faceIndex];
+    auto face=faces[faceIndex].box;
 
-    return roi;
+    return face;
 }
 
 void YOLOv8_face::drawPred(cv::Mat &frame, int faceIndex)
-{
-    float conf=confidences[faceIndex];
-    std::vector<cv::Point> landmark=landmarks[faceIndex];
-    cv::Rect roi=boxes[faceIndex];
+{ 
+    auto face=faces[faceIndex];
+    auto roi=face.box;
 
     // Rectangle of bounding box
     roi=roi & cv::Rect(0, 0, frame.size().width, frame.size().height);
@@ -282,7 +331,7 @@ void YOLOv8_face::drawPred(cv::Mat &frame, int faceIndex)
     rectangle(frame, roi, Scalar(0, 0, 255), 2);
 
     //Get the label for the class name and its confidence
-    std::string label = format("F:%.2f", conf);
+    std::string label = format("F:%.2f", face.confidence);
 
     //Display the label at the top of the bounding box
     /*int baseLine;
@@ -290,17 +339,17 @@ Size labelSize = getTextSize(label, FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseLine);
 top = max(top, labelSize.height);
 rectangle(frame, Point(left, top - int(1.5 * labelSize.height)), Point(left + int(1.5 * labelSize.width), top + baseLine), Scalar(0, 255, 0), FILLED);*/
 
-    putText(frame, label, Point(roi.x, roi.y-5), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(0, 255, 0), 1);
+    putText(frame, label, Point(roi.x+5, roi.y>10 ? roi.y-5 : roi.y+15), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(0, 255, 0), 1);
     // Eyes
-    circle(frame, landmark[0], 2, Scalar(255, 0, 0), 1);
-    circle(frame, landmark[1], 2, Scalar(255, 0, 0), 1);
-    line(frame, landmark[0], landmark[1], Scalar(0, 255, 0));
+    circle(frame, face.landmarks[0], 2, Scalar(255, 0, 0), 1);
+    circle(frame, face.landmarks[1], 2, Scalar(255, 0, 0), 1);
+    line(frame, face.landmarks[0], face.landmarks[1], Scalar(0, 255, 0));
 
     // Nose
-    circle(frame, landmark[2], 8, Scalar(0, 255, 255), 1);
+    circle(frame, face.landmarks[2], 8, Scalar(0, 255, 255), 1);
 
     // Mouth
-    circle(frame, landmark[3], 2, Scalar(0, 255, 255), 1);
-    circle(frame, landmark[4], 2, Scalar(0, 255, 255), 1);
-    line(frame, landmark[3], landmark[4], Scalar(0, 255, 0));
+    circle(frame, face.landmarks[3], 2, Scalar(0, 255, 255), 1);
+    circle(frame, face.landmarks[4], 2, Scalar(0, 255, 255), 1);
+    line(frame, face.landmarks[3], face.landmarks[4], Scalar(0, 255, 0));
 }
