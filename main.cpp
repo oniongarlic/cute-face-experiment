@@ -123,12 +123,12 @@ void detect_from_image(YOLOv8_face &face, OpenFace &of, const char *file)
     waitKey(0);
 }
 
-void visualize_embedding(cv::Mat &frame, const cv::Mat &e)
+void visualize_embedding(cv::Mat &frame, const cv::Mat &e, int ypos=0)
 {
     cv::Mat eg;
     e.convertTo(eg, CV_8U, 127.5, 127.5);
     cv::resize(eg, eg, cv::Size(256, 32), 0, 0, cv::INTER_NEAREST);
-    cv::Mat roi=frame(cv::Rect(0,0,256,32));
+    cv::Mat roi=frame(cv::Rect(0, ypos, 256, 32));
     cv:cvtColor(eg, eg, cv::COLOR_GRAY2BGR);
     eg.copyTo(roi);
     // imshow("Embedding", eg);
@@ -175,6 +175,7 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
     }
 
     label=pe->current();
+    se=pe->get_embedding(label);
 
     double capw=cap.get(cv::CAP_PROP_FRAME_WIDTH);
     double caph=cap.get(cv::CAP_PROP_FRAME_HEIGHT);
@@ -185,8 +186,12 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
         cv::Mat vec;
         cv::Mat scaled;
         float sdcos,dcos;
+        YoloFace yf;
 
         frames++;
+
+        if (skip_frame==1 && (frames & 1))
+            continue;
 
         tm.start();
 
@@ -202,9 +207,6 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
             scaled.convertTo(scaled, -1, (float)imageContrast/33.0, imageBrightness);
         }
 
-        if (skip_frame==1 && (frames & 1))
-            continue;
-
         if (!tracking || tracked>fps) {
 
             f=face.detect(scaled); // scaled
@@ -217,20 +219,23 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
             }
 
             if (f>0) {
-                int i=face.getLargestFace();
+                const int i=face.getLargestFace();
+                yf=face.getFace(i);
                 theFace.face=face.getFaceMat(i, scaled);
 
                 focus.simulatedFocus=simulatedFocus;
                 // focus.isFocused(theFace.face, peaking);
 
                 if (ao.embeddings) {
-                    cv::Mat rface, fe;
+                    cv::Mat rface, fe, af;
 
-                    face.getRotatedFace(scaled, rface, i);
-                    imshow("RotatedFace", rface);
+                    //face.getRotatedFace(scaled, rface, i);
+                    //imshow("RotatedFace", rface);
 
-                    fe=of.detect(rface);
-                    visualize_embedding(scaled, fe);
+                    face.getAlignedFace(scaled, af, i);
+
+                    fe=of.detect(af);
+                    visualize_embedding(scaled, fe, 0);
 
                     if (!theFace.e.empty()) {
                         cv::detail::tracking::tbm::CosDistance cosd = cv::detail::tracking::tbm::CosDistance(fe.size());
@@ -256,6 +261,7 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
                         cv::detail::tracking::tbm::CosDistance cosd = cv::detail::tracking::tbm::CosDistance(fe.size());
                         sdcos = cosd.compute(fe, se);
                         //printf("CompareFaceDist: %f\n", sdcos);
+                        visualize_embedding(scaled, se, 32);
                     }
 
                 }
@@ -284,17 +290,15 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
                 haveface=true;
 
                 auto n=face.getNosePosition(i);
-                float conf=face.getFaceConfidence(i);
-
-                theFace.nose=face.getNosePosition(i);
-                theFace.confidence=face.getFaceConfidence(i);
+                theFace.nose=n;
+                theFace.confidence=yf.confidence;
 
                 theFace.ma_h.add((double)n.x);
                 theFace.ma_v.add((double)n.y);
 
-                mqtt.publish_point("face", n, face.faceArea, conf);
+                mqtt.publish_point("face", n, yf.area, yf.confidence);
 
-                // printf("Face size: %f (%f, %f) (%f) (%f,%f)\n", face.faceArea, n.x, n.y, conf, theFace.ma_h.get(), theFace.ma_v.get());
+                //printf("Face size: %f (%f, %f) (%f) (%f,%f)\n", yf.area, n.x, n.y, yf.confidence, theFace.ma_h.get(), theFace.ma_v.get());
 
                 face.drawPred(scaled, i);
 
@@ -306,7 +310,6 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
             } else if (f==0 && peaking) {
                 focus_peaking(scaled, focus.inFocus);
             }
-
         }
 
         if (tracking) {
@@ -340,6 +343,7 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
         if (f>0) {
             putText(scaled, std::to_string(theFace.nose.x), Point(10, 160), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(128, 255, 128));
             putText(scaled, std::to_string(theFace.nose.y), Point(10, 180), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(128, 255, 128));
+            putText(scaled, std::to_string(yf.area), Point(10, 200), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(128, 255, 128));
         }
 
         imshow(kWinName, scaled);

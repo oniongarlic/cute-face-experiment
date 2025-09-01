@@ -61,12 +61,37 @@ cv::Mat YOLOv8_face::resize_image(const cv::Mat srcimg, int *newh, int *neww, in
     return dstimg;
 }
 
+void YOLOv8_face::getAlignedFace(const cv::Mat &frame, cv::Mat &output, int faceIndex)
+{
+    cv::Mat o;
+    const int as=112;
+
+    std::vector<cv::Point2f> arcface_template = {
+        {38.2946f, 51.6963f},
+        {73.5318f, 51.5014f},
+        {56.0252f, 71.7366f},
+        {41.5493f, 92.3655f},
+        {70.7299f, 92.2041f}
+    };
+
+    std::vector<cv::Point> landmarks=faces[faceIndex].landmarks;
+
+    // Estimate transform
+    cv::Mat M = cv::estimateAffinePartial2D(landmarks, arcface_template);
+
+    // Warp face to 112x112
+    cv::Mat aligned;
+    cv::warpAffine(frame, aligned, M, cv::Size(as, as), cv::INTER_LINEAR);
+
+    output=aligned;
+}
+
 void YOLOv8_face::getRotatedFace(const cv::Mat &frame, cv::Mat &output, int faceIndex)
 {
     std::vector<cv::Point> landmark=faces[faceIndex].landmarks;
     cv::Rect roi=faces[faceIndex].box;
 
-    imshow("roi", frame(roi));
+    // imshow("roi", frame(roi));
 
     // Eyes
     Point d = landmark[0]-landmark[1];
@@ -128,21 +153,16 @@ cv::Mat YOLOv8_face::getFaceMat(int idx, const cv::Mat &frame)
     return frame(roi);
 }
 
-float YOLOv8_face::getFaceConfidence(int idx)
-{
-    return faces[idx].confidence;
-}
-
 std::vector<Point> YOLOv8_face::getFaceLandmarks(int idx)
 {
     return faces[faceindex[idx]].landmarks;
 }
 
-cv::Point YOLOv8_face::getNosePosition(int idx)
+cv::Point2f YOLOv8_face::getNosePosition(int idx)
 {
     auto l=faces[idx].landmarks;
     auto n=l[2];
-    cv::Point nose;
+    cv::Point2f nose;
 
     nose.x=((float)n.x/srcRatiow)-0.5f;
     nose.y=((float)n.y/srcRatioh)-0.5f;
@@ -193,12 +213,6 @@ void YOLOv8_face::generate_proposal(const Mat &out, int imgh, int imgw, float ra
                 float cx = (j + 0.5f)*stride;
                 float cy = (i + 0.5f)*stride;
 
-                cout << cx << ":" << cy << endl;
-                cout << pred_ltrb[0] << endl;
-                cout << pred_ltrb[1] << endl;
-                cout << pred_ltrb[2] << endl;
-                cout << pred_ltrb[3] << endl;
-
                 float xmin = max((cx - pred_ltrb[0] - padw)*ratiow, 0.f);
                 float ymin = max((cy - pred_ltrb[1] - padh)*ratioh, 0.f);
                 float xmax = min((cx + pred_ltrb[2] - padw)*ratiow, float(imgw - 1));
@@ -208,6 +222,8 @@ void YOLOv8_face::generate_proposal(const Mat &out, int imgh, int imgw, float ra
                 auto face=YoloFace();
                 face.box=box;
                 face.confidence=box_prob;
+
+                face.area=(float)(box.width*box.height)/(float)inpArea;
 
                 face.inside=true;
                 std::vector<Point> kpts(5);
@@ -220,7 +236,7 @@ void YOLOv8_face::generate_proposal(const Mat &out, int imgh, int imgw, float ra
                     if (!(x>xmin && x<xmax && y>ymin && y<ymax))
                         face.inside=false;
 
-                    cout << l << ":" << face.inside << "(" << x << " , " << y << ") " << pt_conf  << endl;
+                    //cout << l << ":" << face.inside << "(" << x << " , " << y << ") " << pt_conf  << endl;
                     //cout << k << ": " << pt_conf << " - " << ptr_kp[(k * 3)*area + index] << "," << ptr_kp[(k * 3)*area + index] << endl;
 
                     kpts[k]=l;
@@ -281,23 +297,24 @@ int YOLOv8_face::detect(cv::Mat &srcimg)
     return faceCount;
 }
 
-int YOLOv8_face::getLargestFace()
+int YOLOv8_face::getLargestFace() const
 {
-    int area=96*96, largest=faceCount>0 ? 0 : -1;
+    int area=32*32, largest=faceCount>0 ? 0 : -1;
 
     for (size_t i = 0; i < faceindex.size(); ++i) {
-        int idx = faceindex[i];
+        const int idx = faceindex[i];
         const cv::Rect box = faces[idx].box;
-
         int a=box.width*box.height;
+
+        printf("%d: %d (%d) %f\n", i, a, idx, faces[idx].confidence);
+
         if (a>area && faces[idx].confidence>0.60f) {
             area=a;
-            largest=idx;
+            largest=i;
         }
-        // printf("BOX: %d %d (%d)\n", box.width, box.height, a);
     }
 
-    faceArea=area/inpArea;
+    cout << largest << endl;
 
     return largest;
 }

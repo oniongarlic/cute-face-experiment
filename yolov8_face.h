@@ -20,6 +20,7 @@ class YoloFace {
 public:
     cv::Rect box;
     float confidence;
+    float area;
     bool inside;
     std::vector<cv::Point> landmarks;
     std::vector<float> landmarkconf;
@@ -34,19 +35,18 @@ public:
     cv::Rect lgbox;
     double variance = 0.0;
     int faceCount=0;
-    double faceArea=0; // normalized 0-1
     
     void drawPred(cv::Mat &frame, int faceIndex);
     void getRotatedFace(const cv::Mat& frame, cv::Mat &output, int faceIndex);
-    int getLargestFace();
+    int getLargestFace() const;
     
     YoloFace getFace(int idx);
     cv::Mat getFaceMat(int idx, const cv::Mat &frame);
-    float getFaceConfidence(int idx);
     std::vector<cv::Point> getFaceLandmarks(int idx);
-    cv::Point getNosePosition(int faceIndex);
+    cv::Point2f getNosePosition(int faceIndex);
     cv::Rect getROI(int faceIndex);
 
+    void getAlignedFace(const cv::Mat &frame, cv::Mat &output, int faceIndex);
 private:
     cv::Mat resize_image(const cv::Mat srcimg, int *newh, int *neww, int *padh, int *padw);
     

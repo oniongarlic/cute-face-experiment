@@ -161,7 +161,7 @@ std::string Persons::current_name() {
 
 cv::Mat Persons::get_embedding(int id) const
 {
-    cv::Mat e(1, 128, CV_32F);
+    cv::Mat e(1, 128, CV_32F, cv::Scalar::all(0));
 
     if (auto search = embeddings.find(id); search != embeddings.end()) {
         cout << id << search->second << endl;
