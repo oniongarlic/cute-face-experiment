@@ -42,6 +42,9 @@ struct opts {
 
     float faceThreshold=0.65;
     float nmsThreshold=0.5;
+
+    int fov_h=45;
+    int fov_v=30;
 };
 
 struct opts ao;
@@ -71,6 +74,8 @@ public:
     Point2d center;
     Point2d nose;
     Point2d mouth;
+
+    Point2d angle;
 
     float confidence;
 
@@ -121,6 +126,20 @@ void detect_from_image(YOLOv8_face &face, OpenFace &of, const char *file)
     imshow(kWinName, scaled);
 
     waitKey(0);
+}
+
+cv::Point2d pixelToAngle(cv::Point2d p, double fov_h_deg, double fov_v_deg)
+{
+    double fov_h = fov_h_deg * CV_PI / 180.0;
+    double fov_v = fov_v_deg * CV_PI / 180.0;
+
+    double tan_half_fov_h = tan(fov_h / 2.0);
+    double tan_half_fov_v = tan(fov_v / 2.0);
+
+    double angle_x = atan(p.x * tan_half_fov_h);
+    double angle_y = atan(p.y * tan_half_fov_v);
+
+    return cv::Point2d(angle_x * 180.0 / CV_PI, angle_y * 180.0 / CV_PI);
 }
 
 void visualize_embedding(cv::Mat &frame, const cv::Mat &e, int ypos=0)
@@ -237,6 +256,8 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
                     fe=of.detect(af);
                     visualize_embedding(scaled, fe, 0);
 
+                    imshow("Aligned face", af);
+
                     if (!theFace.e.empty()) {
                         cv::detail::tracking::tbm::CosDistance cosd = cv::detail::tracking::tbm::CosDistance(fe.size());
                         dcos = cosd.compute(fe, theFace.e);
@@ -296,11 +317,16 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
                 theFace.ma_h.add((double)n.x);
                 theFace.ma_v.add((double)n.y);
 
+                auto na=pixelToAngle(n*2, ao.fov_h, ao.fov_v);
+                //printf("FA: (%f, %f) (%d - %d)\n", na.x, na.y, ao.fov_h, ao.fov_v);
+                theFace.angle=na;
+
                 mqtt.publish_point("face", n, yf.area, yf.confidence);
 
                 //printf("Face size: %f (%f, %f) (%f) (%f,%f)\n", yf.area, n.x, n.y, yf.confidence, theFace.ma_h.get(), theFace.ma_v.get());
 
                 face.drawPred(scaled, i);
+
 
             } else if (f==0 && haveface==true) {
                 int r;
@@ -439,7 +465,7 @@ int main(int argc, char **argv)
     char *dbopts=NULL;
     char *input=NULL;
 
-    while ((opt = getopt(argc, argv, "f:d:c:p:sewg")) != -1) {
+    while ((opt = getopt(argc, argv, "f:d:c:p:b:v:sewgh")) != -1) {
         switch(opt) {
         case 'f':
             input=optarg;
@@ -454,6 +480,12 @@ int main(int argc, char **argv)
         case 'c':
             camera_id=atoi(optarg);
             break;
+        case 'v':
+            ao.fov_v=atoi(optarg);
+            break;
+        case 'b':
+            ao.fov_h=atoi(optarg);
+            break;
         case 's':
             skip_frame=1;
             break;
@@ -466,6 +498,9 @@ int main(int argc, char **argv)
             break;
         case 'g':
             ao.use_gpu=true;
+            break;
+        case 'h':
+            printf("Usage:\n[-f file][-p personID][-c cameraID][-d database][-s][-e][-w][-g]");
             break;
         }
     }
@@ -522,7 +557,7 @@ int main(int argc, char **argv)
     destroyAllWindows();
 
     if (cx) {
-        cx->disconnect();
+        //cx->disconnect();
         delete cx;
     }
 
