@@ -142,12 +142,12 @@ cv::Point2d pixelToAngle(cv::Point2d p, double fov_h_deg, double fov_v_deg)
     return cv::Point2d(angle_x * 180.0 / CV_PI, angle_y * 180.0 / CV_PI);
 }
 
-void visualize_embedding(cv::Mat &frame, const cv::Mat &e, int ypos=0)
+void visualize_embedding(cv::Mat &frame, const cv::Mat &e, cv::Point2i &p)
 {
     cv::Mat eg;
     e.convertTo(eg, CV_8U, 127.5, 127.5);
     cv::resize(eg, eg, cv::Size(256, 32), 0, 0, cv::INTER_NEAREST);
-    cv::Mat roi=frame(cv::Rect(0, ypos, 256, 32));
+    cv::Mat roi=frame(cv::Rect(p.x, p.y, 256, 32));
     cv:cvtColor(eg, eg, cv::COLOR_GRAY2BGR);
     eg.copyTo(roi);
     // imshow("Embedding", eg);
@@ -246,7 +246,8 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
                 // focus.isFocused(theFace.face, peaking);
 
                 if (ao.embeddings) {
-                    cv::Mat rface, fe, af;
+                    cv::Mat rface, fe, af;                    
+                    cv::Point2i vep(0, 0);
 
                     //face.getRotatedFace(scaled, rface, i);
                     //imshow("RotatedFace", rface);
@@ -254,7 +255,7 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
                     face.getAlignedFace(scaled, af, i);
 
                     fe=of.detect(af);
-                    visualize_embedding(scaled, fe, 0);
+                    visualize_embedding(scaled, fe, vep);
 
                     imshow("Aligned face", af);
 
@@ -282,7 +283,8 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
                         cv::detail::tracking::tbm::CosDistance cosd = cv::detail::tracking::tbm::CosDistance(fe.size());
                         sdcos = cosd.compute(fe, se);
                         //printf("CompareFaceDist: %f\n", sdcos);
-                        visualize_embedding(scaled, se, 32);
+                        cv::Point2i ep(0, 32);
+                        visualize_embedding(scaled, se, ep);
                     }
 
                 }
@@ -357,19 +359,23 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
 
         tm.stop();
 
-        const float closedist=0.1;
+        const float closedist=0.18;
         putText(scaled, std::to_string(f), Point(10, 40), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(128, 255, 128));
         putText(scaled, std::to_string(tm.getFPS()), Point(10, 60), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(192, 255, 192));
         if (ao.embeddings) {
+            Scalar r(64, 64, 255);
+            Scalar g(64, 255, 64);
             putText(scaled, std::to_string(pe->current()), Point(10, 20), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(128, 255, 128));
-            putText(scaled, pe->current_name(), Point(30, 20), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(sdcos<closedist ? 255 : 128, 255, 128));
-            putText(scaled, std::to_string(dcos), Point(10, 80), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(192, 255, 192));
-            putText(scaled, std::to_string(sdcos), Point(10, 100), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(192, 255, 192));
+            putText(scaled, pe->current_name(), Point(30, 20), FONT_HERSHEY_SIMPLEX, 0.6, sdcos<closedist ? g : r, 2);
+            putText(scaled, std::to_string(dcos), Point(10, 80), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(192, 255, 255));
+            putText(scaled, std::to_string(sdcos), Point(10, 100), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(192, 255, 128));
         }
         if (f>0) {
             putText(scaled, std::to_string(theFace.nose.x), Point(10, 160), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(128, 255, 128));
             putText(scaled, std::to_string(theFace.nose.y), Point(10, 180), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(128, 255, 128));
             putText(scaled, std::to_string(yf.area), Point(10, 200), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(128, 255, 128));
+            putText(scaled, std::to_string(theFace.angle.x), Point(10, 220), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(128, 255, 128));
+            putText(scaled, std::to_string(theFace.angle.y), Point(10, 240), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(128, 255, 128));
         }
 
         imshow(kWinName, scaled);
