@@ -522,6 +522,12 @@ int main(int argc, char **argv)
     OpenFace of(ofo);
     SelfieSegment ss("/data/AI/selfie_segmenter.tflite");
 
+    if (!dbopts) {
+        const char *user=getlogin();
+        dbopts=(char *)malloc(8+strlen(user));
+        sprintf(dbopts, "dbname=%s", user);
+    }
+
     printf("DB: %s\n", dbopts);
     printf("Camera: %d, skip: %d\n", camera_id, skip_frame);
 
