@@ -169,6 +169,7 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
 
     long frames=0;
     int label=0,fps=30,tracked=0,f=0;
+    int cfid=-1;
 
     const cv::Scalar purple	(128.0, 0.0, 128.0);
 
@@ -247,7 +248,7 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
 
                 if (ao.embeddings) {
                     cv::Mat rface, fe, af;                    
-                    cv::Point2i vep(0, 0);
+                    cv::Point2i vep(160, 0);
 
                     //face.getRotatedFace(scaled, rface, i);
                     //imshow("RotatedFace", rface);
@@ -283,7 +284,7 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
                         cv::detail::tracking::tbm::CosDistance cosd = cv::detail::tracking::tbm::CosDistance(fe.size());
                         sdcos = cosd.compute(fe, se);
                         //printf("CompareFaceDist: %f\n", sdcos);
-                        cv::Point2i ep(0, 32);
+                        cv::Point2i ep(160, 32);
                         visualize_embedding(scaled, se, ep);
                     }
 
@@ -366,7 +367,7 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
             Scalar r(64, 64, 255);
             Scalar g(64, 255, 64);
             putText(scaled, std::to_string(pe->current()), Point(10, 20), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(128, 255, 128));
-            putText(scaled, pe->current_name(), Point(30, 20), FONT_HERSHEY_SIMPLEX, 0.6, sdcos<closedist ? g : r, 2);
+            putText(scaled, pe->current_name(), Point(30, 20), FONT_HERSHEY_SIMPLEX, 0.6, g, cfid==pe->current() ? 2 : 1);
             putText(scaled, std::to_string(dcos), Point(10, 80), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(192, 255, 255));
             putText(scaled, std::to_string(sdcos), Point(10, 100), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(192, 255, 128));
         }
@@ -391,8 +392,8 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
             break;
         case 'b':
             if (f>0 && ao.embeddings) {
-                int id=pe->query_closest(theFace.e);
-                printf("db says: %d\n", id);
+                cfid=pe->query_closest(theFace.e);
+                printf("db says: %d\n", cfid);
             }
             break;
         case 's':
