@@ -142,7 +142,7 @@ cv::Point2d pixelToAngle(cv::Point2d p, double fov_h_deg, double fov_v_deg)
     return cv::Point2d(angle_x * 180.0 / CV_PI, angle_y * 180.0 / CV_PI);
 }
 
-void visualize_embedding(cv::Mat &frame, const cv::Mat &e, cv::Point2i &p)
+void visualize_embedding(cv::Mat &frame, const cv::Mat &e, const cv::Point2i &p)
 {
     cv::Mat eg;
     e.convertTo(eg, CV_8U, 127.5, 127.5);
@@ -150,7 +150,12 @@ void visualize_embedding(cv::Mat &frame, const cv::Mat &e, cv::Point2i &p)
     cv::Mat roi=frame(cv::Rect(p.x, p.y, 256, 32));
     cv:cvtColor(eg, eg, cv::COLOR_GRAY2BGR);
     eg.copyTo(roi);
-    // imshow("Embedding", eg);
+}
+
+void visualize_mat(cv::Mat &frame, const cv::Mat &e, const cv::Point2i &p)
+{
+    cv::Mat roi=frame(cv::Rect(p.x, p.y, e.cols, e.rows));
+    e.copyTo(roi);
 }
 
 void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int camera, string file="")
@@ -250,6 +255,7 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
                     cv::Mat rface, fe, af;                    
                     cv::Point2i vep(160, 0);
 
+
                     //face.getRotatedFace(scaled, rface, i);
                     //imshow("RotatedFace", rface);
 
@@ -258,7 +264,10 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
                     fe=of.detect(af);
                     visualize_embedding(scaled, fe, vep);
 
-                    imshow("Aligned face", af);
+                    cv::Point2i fep(scaled.cols-af.cols-8, 16);
+                    visualize_mat(scaled, af, fep);
+
+                    // imshow("Aligned face", af);
 
                     if (!theFace.e.empty()) {
                         cv::detail::tracking::tbm::CosDistance cosd = cv::detail::tracking::tbm::CosDistance(fe.size());
