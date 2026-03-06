@@ -128,13 +128,13 @@ int Persons::load()
 
 int Persons::next() {
     if (cp!=persons.end())
-        cp++;
+        cp=std::next(cp);
     return cp->first;
 }
 
 int Persons::previous() {
     if (cp!=persons.begin())
-        cp--;
+        cp=std::prev(cp);
     return cp->first;
 }
 
