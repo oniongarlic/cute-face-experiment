@@ -22,6 +22,7 @@ public:
     void loop();
 private:
     struct mosquitto *m_mqtt=NULL;
+    bool connected=false;
 };
 
 #endif // MQTT_H

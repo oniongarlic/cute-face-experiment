@@ -34,6 +34,7 @@ int mqtt::connect(void)
         fprintf(stderr, "Unable to connect.\n");
         return -1;
     }
+    connected=true;
     return 0;
 }
 
@@ -45,6 +46,9 @@ int mqtt::publish_string(const char *topic, const char *data)
 {
     int r;
     char ftopic[80];
+
+    if (!connected)
+       return -1;
 
     snprintf(ftopic, sizeof(ftopic), "%s/%s", prefix, topic);
 
@@ -61,6 +65,9 @@ int mqtt::publish_point(const char *topic, cv::Point2f p, float area, float conf
     char ftopic[80];
     char data[256];
 
+    if (!connected)
+       return -1;
+
     snprintf(ftopic, sizeof(ftopic), "%s/%s", prefix, topic);
     snprintf(data, sizeof(data), "{\"face\": [%f,%f,%f,%f]}", p.x, p.y, area, conf);
 
@@ -76,6 +83,9 @@ int mqtt::publish_int(const char *topic, int value)
     int r;
     char ftopic[80];
     char data[256];
+
+    if (!connected)
+       return -1;
 
     snprintf(ftopic, sizeof(ftopic), "%s/%s", prefix, topic);
     snprintf(data, sizeof(data), "%d", value);
