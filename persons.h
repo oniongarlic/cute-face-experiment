@@ -13,6 +13,7 @@
 class Persons
 {
 public:
+    Persons();
     Persons(OpenFace *of, pqxx::connection *cx);
     void save(cv::Mat vec, int faceid);
     void save(cv::Mat vec);

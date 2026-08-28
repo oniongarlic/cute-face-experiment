@@ -5,7 +5,16 @@ using namespace std;
 
 Persons::Persons(OpenFace *of, pqxx::connection *cx)
     : of(of), cx(cx)
-{}
+{
+    persons.clear();
+    cp=persons.begin();
+}
+
+Persons::Persons()
+{
+    persons.clear();
+    cp=persons.begin();
+}
 
 void Persons::save(cv::Mat vec, int faceid)
 {
@@ -127,18 +136,25 @@ int Persons::load()
 }
 
 int Persons::next() {
+    if (persons.empty())
+        return -1;
     if (cp!=persons.end())
         cp++;
     return cp->first;
 }
 
 int Persons::previous() {
+    if (persons.empty())
+        return -1;
     if (cp!=persons.begin())
         cp--;
     return cp->first;
 }
 
 int Persons::current() {
+    printf("C %d\n", persons.size());
+    if (persons.empty())
+        return -1;
     return cp->first;
 }
 
@@ -156,12 +172,17 @@ cv::Mat Persons::current_embedding()
 }
 
 std::string Persons::current_name() {
+    if (persons.empty())
+      return "";
     return cp->second;
 }
 
 cv::Mat Persons::get_embedding(int id) const
 {
     cv::Mat e(1, 128, CV_32F, cv::Scalar::all(0));
+
+    if (embeddings.empty())
+       return e;
 
     if (auto search = embeddings.find(id); search != embeddings.end()) {
         cout << id << search->second << endl;
@@ -174,6 +195,9 @@ cv::Mat Persons::get_embedding(int id) const
 
 std::string Persons::get_name(int id) const
 {
+    if (persons.empty())
+       return "";
+
     if (auto search = persons.find(id); search != persons.end()) {
         cout << id << search->second << endl;
         return search->second;
