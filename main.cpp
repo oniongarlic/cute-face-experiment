@@ -45,6 +45,9 @@ struct opts {
 
     int fov_h=45;
     int fov_v=30;
+
+    bool resize=false;
+    float scale=1.0;
 };
 
 struct opts ao;
@@ -220,13 +223,11 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
 
         tm.start();
 
-#if 0 
-        // double scale = 1024.0f/frame.size().width;
-        double scale=0.5;
-        resize(frame, scaled, Size(), scale, scale, INTER_AREA);
-#else
-        scaled=frame;
-#endif
+        if (ao.resize) {
+           resize(frame, scaled, Size(), ao.scale, ao.scale, INTER_AREA);
+        } else {
+           scaled=frame;
+        }
 
         if (imageContrast!=33 || imageBrightness!=0) {
             scaled.convertTo(scaled, -1, (float)imageContrast/33.0, imageBrightness);
@@ -481,11 +482,15 @@ int main(int argc, char **argv)
     char *dbopts=NULL;
     char *input=NULL;
 
-    while ((opt = getopt(argc, argv, "f:d:c:p:b:v:sewgh")) != -1) {
+    while ((opt = getopt(argc, argv, "f:d:c:p:b:v:sewghr")) != -1) {
         switch(opt) {
         case 'f':
             input=optarg;
             camera_id=-1;
+            break;
+        case 'r':
+            ao.resize=true;
+            ao.scale=0.5;
             break;
         case 'p':
             ao.person=atoi(optarg);
