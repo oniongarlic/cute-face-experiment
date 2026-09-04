@@ -32,10 +32,13 @@ public:
     int find(int id);
     std::string current_name();
     cv::Mat current_embedding();
+    int find_person_id(const cv::Mat &e, float thres);
+    bool is_same_person(int pid, const cv::Mat &e, float thres);
+    bool is_same_embedding(const cv::Mat &e1, const cv::Mat &e2, float thres);
 private:
     OpenFace *of;
     pqxx::connection *cx;
-    std::map<int, cv::Mat> embeddings;
+    std::multimap<int, cv::Mat> embeddings;
     std::map<int, std::string> persons;
 
     std::map<int, std::string>::iterator cp;

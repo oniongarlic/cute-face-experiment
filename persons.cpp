@@ -1,6 +1,9 @@
 
 #include "persons.h"
 
+#include <opencv2/tracking.hpp>
+#include <opencv2/tracking/tracking_by_matching.hpp>
+
 using namespace std;
 
 Persons::Persons(OpenFace *of, pqxx::connection *cx)
@@ -81,7 +84,9 @@ int Persons::load_embeddings()
 
         of->store(m, id);
 
-        m.copyTo(embeddings[id]);
+        cv::Mat cm;
+        m.copyTo(cm);
+        embeddings.insert({id, cm});
     }
 
     t.commit();
@@ -180,4 +185,46 @@ std::string Persons::get_name(int id) const
     }
 
     return "";
+}
+
+int Persons::find_person_id(const cv::Mat &e, float thres)
+{
+    int pid=-1;
+    float dist=1.0f,cd;
+
+    cv::detail::tracking::tbm::CosDistance cosd = cv::detail::tracking::tbm::CosDistance(e.size());
+    for (auto const &p : embeddings) {
+        cd = cosd.compute(e, p.second);
+        if (cd<dist && cd<thres)
+            pid=p.first;
+        //printf("[%d] %f %f\n", p.first, cd);
+    }
+
+    if (pid>-1)
+        printf("Found person [%d] %f\n", pid, cd);
+
+    return pid;
+}
+
+bool Persons::is_same_person(int pid, const cv::Mat &e, float thres)
+{
+    float dist=1.0f;
+
+    auto pi=embeddings.equal_range(pid);
+
+    cv::detail::tracking::tbm::CosDistance cosd = cv::detail::tracking::tbm::CosDistance(e.size());
+    for (auto it=pi.first; it!=pi.second; it++) {
+        float cd = cosd.compute(e, it->second);
+        // first hit close enough is ok (?)
+        if (cd<thres)
+            return true;
+    }
+
+    return false;
+}
+
+bool Persons::is_same_embedding(const cv::Mat &e1, const cv::Mat &e2, float thres)
+{
+    cv::detail::tracking::tbm::CosDistance cosd = cv::detail::tracking::tbm::CosDistance(e1.size());
+    return cosd.compute(e1, e2)<thres ? true : false;
 }
