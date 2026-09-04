@@ -61,7 +61,7 @@ cv::Mat YOLOv8_face::resize_image(const cv::Mat srcimg, int *newh, int *neww, in
     return dstimg;
 }
 
-void YOLOv8_face::getAlignedFace(const cv::Mat &frame, cv::Mat &output, int faceIndex)
+void YOLOv8_face::getAlignedFace(cv::Mat &output, int faceIndex)
 {
     cv::Mat o;
     const int as=112;
@@ -86,7 +86,7 @@ void YOLOv8_face::getAlignedFace(const cv::Mat &frame, cv::Mat &output, int face
     output=aligned;
 }
 
-void YOLOv8_face::getRotatedFace(const cv::Mat &frame, cv::Mat &output, int faceIndex)
+void YOLOv8_face::getRotatedFace(cv::Mat &output, int faceIndex)
 {
     std::vector<cv::Point> landmark=faces[faceIndex].landmarks;
     cv::Rect roi=faces[faceIndex].box;
@@ -99,7 +99,6 @@ void YOLOv8_face::getRotatedFace(const cv::Mat &frame, cv::Mat &output, int face
     float dist = sqrtf(powf(d.y, 2)+powf(d.x, 2));
 
     if (angle>180.0) angle=-(360.f-angle);
-    //angle=avg_angle.add(angle);
 
     Point nose=landmark[2];
     Point center=(landmark[0]+landmark[1]+landmark[2])*0.3333;
@@ -222,10 +221,8 @@ void YOLOv8_face::generate_proposal(const Mat &out, int imgh, int imgw, float ra
                 auto face=YoloFace();
                 face.box=box;
                 face.confidence=box_prob;
-
-                face.area=(float)(box.width*box.height)/(float)inpArea;
-
                 face.inside=true;
+
                 std::vector<Point> kpts(5);
                 std::vector<float> lc;
                 for (int k = 0; k < 5; k++) {                    
@@ -257,6 +254,8 @@ int YOLOv8_face::detect(cv::Mat &srcimg)
     int newh = 0, neww = 0, padh = 0, padw = 0;
     cv::Mat dst = this->resize_image(srcimg, &newh, &neww, &padh, &padw);
     cv::Mat blob;
+
+    frame=srcimg;
 
     cv::dnn::blobFromImage(dst, blob, 1 / 255.0, Size(this->inpWidth, this->inpHeight), Scalar(0, 0, 0), true, false);
     this->net.setInput(blob);
@@ -294,34 +293,46 @@ int YOLOv8_face::detect(cv::Mat &srcimg)
     cv::dnn::NMSBoxes(boxes, confidences, this->confThreshold, this->nmsThreshold, faceindex);
     faceCount=faceindex.size();
 
+    for (size_t i = 0; i < faceindex.size(); ++i) {
+        auto f=getFace(i);
+        f.idx=i;
+        auto l=f.landmarks;
+
+        Point d = l[0]-l[1];
+        float angle = (atan2f(d.y, d.x) * 180.f / CV_PI) - 180.f + 360.f;
+        float dist = sqrtf(powf(d.y, 2)+powf(d.x, 2));
+        if (angle>180.0) angle=-(360.f-angle);
+        f.angle=angle;
+        f.area=(float)f.box.area()/(float)inpArea;
+    }
+
     return faceCount;
 }
 
-int YOLOv8_face::getLargestFace() const
+int YOLOv8_face::getLargestFace()
 {
     int area=32*32, largest=faceCount>0 ? 0 : -1;
 
     for (size_t i = 0; i < faceindex.size(); ++i) {
+        const auto f=getFace(i);
         const int idx = faceindex[i];
         const cv::Rect box = faces[idx].box;
-        int a=box.width*box.height;
 
-        printf("%d: %d (%d) %f\n", i, a, idx, faces[idx].confidence);
+        printf("%zu: %d (%d) %f\n", i, box.area(), idx, faces[idx].confidence);
 
-        if (a>area && faces[idx].confidence>0.60f) {
-            area=a;
+        if (box.area()>area && faces[idx].confidence>0.60f) {
+            area=box.area();
             largest=i;
         }
     }
-
-    cout << largest << endl;
 
     return largest;
 }
 
 YoloFace YOLOv8_face::getFace(int idx)
 {
-    return faces[faceindex[idx]];
+    auto  yf=faces[faceindex[idx]];
+    return yf;
 }
 
 cv::Rect YOLOv8_face::getROI(int faceIndex)
@@ -340,8 +351,6 @@ void YOLOv8_face::drawPred(cv::Mat &frame, int faceIndex)
     roi=roi & cv::Rect(0, 0, frame.size().width, frame.size().height);
 
     // cv::Mat iroi = frame(roi);
-
-    theFace = frame(roi);
 
     //rectangle(frame, Point(left, top), Point(right, bottom), Scalar(0, 0, 255), 3);
     //rectangle(frame, roi, inFocus ? Scalar(0, 255, 0) : Scalar(0, 0, 255), 2);

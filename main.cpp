@@ -39,6 +39,7 @@ struct opts {
     bool store=false;
     bool oneshot=true;
     int person=-1;
+    bool scaled=false;
 
     float faceThreshold=0.65;
     float nmsThreshold=0.5;
@@ -121,8 +122,6 @@ void detect_from_image(YOLOv8_face &face, OpenFace &of, const char *file)
     int f=face.detect(scaled);
     printf("Faces: %d\n", f);
 
-    of.detect(face.theFace);
-
     imshow(kWinName, scaled);
 
     waitKey(0);
@@ -156,6 +155,25 @@ void visualize_mat(cv::Mat &frame, const cv::Mat &e, const cv::Point2i &p)
 {
     cv::Mat roi=frame(cv::Rect(p.x, p.y, e.cols, e.rows));
     e.copyTo(roi);
+}
+
+void process_face(YoloFace &face)
+{
+
+}
+
+void process_faces(YOLOv8_face &faces, OpenFace &of)
+{
+    int f=faces.faceCount;
+    for (int fi=0;fi<f;f++) {
+        cv::Mat af;
+        auto face=faces.getFace(fi);
+
+        faces.getAlignedFace(af, fi);
+        auto fe=of.detect(af);
+
+        process_face(face);
+    }
 }
 
 void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int camera, string file="")
@@ -220,13 +238,13 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
 
         tm.start();
 
-#if 0 
+        if (ao.scaled) {
         // double scale = 1024.0f/frame.size().width;
-        double scale=0.5;
-        resize(frame, scaled, Size(), scale, scale, INTER_AREA);
-#else
-        scaled=frame;
-#endif
+            double scale=0.5;
+            resize(frame, scaled, Size(), scale, scale, INTER_AREA);
+        } else {
+            scaled=frame;
+        }
 
         if (imageContrast!=33 || imageBrightness!=0) {
             scaled.convertTo(scaled, -1, (float)imageContrast/33.0, imageBrightness);
@@ -243,6 +261,8 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
                 tracking=false;
             }
 
+            //process_faces(face, of);
+
             if (f>0) {
                 const int i=face.getLargestFace();
                 yf=face.getFace(i);
@@ -255,11 +275,10 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
                     cv::Mat rface, fe, af;                    
                     cv::Point2i vep(160, 0);
 
-
                     //face.getRotatedFace(scaled, rface, i);
                     //imshow("RotatedFace", rface);
 
-                    face.getAlignedFace(scaled, af, i);
+                    face.getAlignedFace(af, i);
 
                     fe=of.detect(af);
                     visualize_embedding(scaled, fe, vep);
@@ -267,7 +286,18 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
                     cv::Point2i fep(scaled.cols-af.cols-8, 16);
                     visualize_mat(scaled, af, fep);
 
-                    // imshow("Aligned face", af);
+                    if (cfid==-1) {
+                        if ((cfid=pe->find_person_id(fe, 0.1f)) > -1) {
+                            printf("@");
+                        }
+                    } else {
+                        if (!pe->is_same_person(cfid, fe, 0.05f)) {
+                            cfid=-1;
+                            printf("?");
+                        } else {
+                            printf("!");
+                        }
+                    }
 
                     if (!theFace.e.empty()) {
                         cv::detail::tracking::tbm::CosDistance cosd = cv::detail::tracking::tbm::CosDistance(fe.size());
@@ -405,6 +435,12 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
                 printf("db says: %d\n", cfid);
             }
             break;
+        case 'n':
+            if (f>0 && ao.embeddings) {
+                cfid=pe->find_person_id(theFace.e, 0.1);
+                printf("Found person: %d\n", cfid);
+            }
+            break;
         case 's':
             if (f>0 && ao.embeddings) {
                 printf("Adding face with label: %d\n", label);
@@ -481,11 +517,12 @@ int main(int argc, char **argv)
     char *dbopts=NULL;
     char *input=NULL;
 
-    while ((opt = getopt(argc, argv, "f:d:c:p:b:v:sewgh")) != -1) {
+    while ((opt = getopt(argc, argv, "f:d:c:p:b:v:sewghx")) != -1) {
         switch(opt) {
         case 'f':
             input=optarg;
             camera_id=-1;
+            ao.scaled=true;
             break;
         case 'p':
             ao.person=atoi(optarg);
@@ -504,6 +541,9 @@ int main(int argc, char **argv)
             break;
         case 's':
             skip_frame=1;
+            break;
+        case 'x':
+            ao.scaled=true;
             break;
         case 'e':
             ao.embeddings=true;

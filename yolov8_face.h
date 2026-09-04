@@ -18,8 +18,10 @@ typedef struct YoloFaceOptions {
 
 class YoloFace {
 public:
+    int idx;
     cv::Rect box;
     float confidence;
+    float angle;
     float area;
     bool inside;
     std::vector<cv::Point> landmarks;
@@ -30,15 +32,15 @@ class YOLOv8_face
 {
 public:
     YOLOv8_face(const YoloFaceOptions &opts);
-    int detect(cv::Mat& frame);
-    cv::Mat theFace;
+    int detect(cv::Mat& srcimg);
+    cv::Mat frame;
     cv::Rect lgbox;
     double variance = 0.0;
     int faceCount=0;
     
     void drawPred(cv::Mat &frame, int faceIndex);
-    void getRotatedFace(const cv::Mat& frame, cv::Mat &output, int faceIndex);
-    int getLargestFace() const;
+    void getRotatedFace(cv::Mat &output, int faceIndex);
+    int getLargestFace();
     
     YoloFace getFace(int idx);
     cv::Mat getFaceMat(int idx, const cv::Mat &frame);
@@ -46,7 +48,7 @@ public:
     cv::Point2f getNosePosition(int faceIndex);
     cv::Rect getROI(int faceIndex);
 
-    void getAlignedFace(const cv::Mat &frame, cv::Mat &output, int faceIndex);
+    void getAlignedFace(cv::Mat &output, int faceIndex);
 private:
     cv::Mat resize_image(const cv::Mat srcimg, int *newh, int *neww, int *padh, int *padw);
     
@@ -71,8 +73,6 @@ private:
     
     void softmax_(const float* x, float* y, int length);
     void generate_proposal(const cv::Mat &out, int imgh, int imgw, float ratioh, float ratiow, int padh, int padw);
-    
-    MovingAverage avg_angle;
 };
 
 #endif // YOLOV8_FACE_H
