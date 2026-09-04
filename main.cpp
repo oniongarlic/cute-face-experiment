@@ -46,6 +46,9 @@ struct opts {
 
     int fov_h=45;
     int fov_v=30;
+
+    bool resize=false;
+    float scale=1.0;
 };
 
 struct opts ao;
@@ -238,12 +241,10 @@ void detect_from_video(YOLOv8_face &face, OpenFace &of, SelfieSegment &ss, int c
 
         tm.start();
 
-        if (ao.scaled) {
-        // double scale = 1024.0f/frame.size().width;
-            double scale=0.5;
-            resize(frame, scaled, Size(), scale, scale, INTER_AREA);
+        if (ao.resize) {
+           resize(frame, scaled, Size(), ao.scale, ao.scale, INTER_AREA);
         } else {
-            scaled=frame;
+           scaled=frame;
         }
 
         if (imageContrast!=33 || imageBrightness!=0) {
@@ -517,12 +518,16 @@ int main(int argc, char **argv)
     char *dbopts=NULL;
     char *input=NULL;
 
-    while ((opt = getopt(argc, argv, "f:d:c:p:b:v:sewghx")) != -1) {
+    while ((opt = getopt(argc, argv, "f:d:c:p:b:v:sewghrx")) != -1) {
         switch(opt) {
         case 'f':
             input=optarg;
             camera_id=-1;
             ao.scaled=true;
+            break;
+        case 'r':
+            ao.resize=true;
+            ao.scale=0.5;
             break;
         case 'p':
             ao.person=atoi(optarg);
@@ -556,7 +561,8 @@ int main(int argc, char **argv)
             ao.use_gpu=true;
             break;
         case 'h':
-            printf("Usage:\n[-f file][-p personID][-c cameraID][-d database][-s][-e][-w][-g]");
+            printf("Usage:\n[-f file][-p personID][-c cameraID][-d database][-s][-e][-w][-g]\n");
+            return 1;
             break;
         }
     }
@@ -576,18 +582,22 @@ int main(int argc, char **argv)
     ofo.use_gpu=ao.use_gpu;
 
     OpenFace of(ofo);
-    SelfieSegment ss("/data/AI/selfie_segmenter.tflite");
+    SelfieSegment ss("weights/selfie_segmenter.tflite");
 
     if (!dbopts) {
         const char *user=getlogin();
-        dbopts=(char *)malloc(8+strlen(user));
-        sprintf(dbopts, "dbname=%s", user);
+        if (user) {
+         dbopts=(char *)malloc(8+strlen(user));
+         sprintf(dbopts, "dbname=%s", user);
+        } else {
+         printf("Failed to set default database, user not found?\n");
+        }
     }
 
     printf("DB: %s\n", dbopts);
     printf("Camera: %d, skip: %d\n", camera_id, skip_frame);
 
-    if (connect_db(dbopts)>0) {
+    if (dbopts && connect_db(dbopts)>0) {
         pe=new Persons(&of, cx);
         int r=pe->load();
         printf("Loaded %d persons\n", r);
@@ -600,6 +610,7 @@ int main(int argc, char **argv)
 
     } else {
         printf("No database\n");
+        pe=new Persons();
     }
 
     mqtt.connect();
